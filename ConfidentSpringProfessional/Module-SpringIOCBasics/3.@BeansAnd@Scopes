@@ -1,0 +1,251 @@
+1. In the previous lesson, it was mentioned that Spring uses the methods in the @Configuration class to instantiate just one object of each type.
+
+We need to find out if that is really the case.
+
+2. Singletons
+
+@Override
+public void init() throws ServletException {
+    AnnotationConfigApplicationContext ctx
+            = new AnnotationConfigApplicationContext(MyFancyPdfInvoicesApplicationConfiguration.class);
+    this.userService = ctx.getBean(UserService.class);
+    this.objectMapper = ctx.getBean(ObjectMapper.class);
+    this.invoiceService = ctx.getBean(InvoiceService.class);
+}
+
+You are calling, e.g. ctx.getBean(UserService.class) and Spring returns you an object of type UserService which it knows about from the corresponding method in your configuration class. When you call that method multiple times, do you always get back the same UserService object or a different, new instance?
+
+There’s an easy way to verify that. Adjust your init() method so that it reads like this:
+
+@Override
+public void init() throws ServletException {
+    AnnotationConfigApplicationContext ctx
+            = new AnnotationConfigApplicationContext(MyFancyPdfInvoicesApplicationConfiguration.class);
+    this.userService = ctx.getBean(UserService.class);
+    this.objectMapper = ctx.getBean(ObjectMapper.class);
+    this.invoiceService = ctx.getBean(InvoiceService.class);
+
+    System.out.println(ctx.getBean(UserService.class));
+    System.out.println(ctx.getBean(UserService.class));
+    System.out.println(ctx.getBean(UserService.class));
+}
+
+Let’s break this down.
+
+System.out.println(ctx.getBean(UserService.class));
+System.out.println(ctx.getBean(UserService.class));
+System.out.println(ctx.getBean(UserService.class));
+
+You are simply calling ctx.getBean() three additional times and printing out the result, i.e. the object, to the console.
+
+Checkpoint: Singletons
+Restart your application and have a look at Tomcat’s logs. You should see something like this:
+
+com.pankaj.myfancypdfinvoices.service.UserService@4ae33a11
+com.pankaj.myfancypdfinvoices.service.UserService@4ae33a11
+com.pankaj.myfancypdfinvoices.service.UserService@4ae33a11
+
+Look at the string after the @ sign. It is the UserServices’s object reference id and it is always the same id.
+
+That’s because, by default, Spring only constructs one instance of your UserService (or any other @Bean), no matter how often you actually call the ctx.getBean method.
+
+That’s what’s called a singleton. And just to repeat it, by default, all @Bean methods produce singletons.
+
+3. Prototype
+
+Most Java & Spring (business) applications will make comprehensive use of singletons. If you are using singletons, however, you need to make sure that all your singletons are thread-safe, or else you will run into race-conditions.
+
+If you don’t want to deal with that, you can also change Spring’s default singleton behavior, with the @Scope annotation.
+
+Go back to your Configuration class and change it like so:
+
+
+package com.pankaj.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pankaj.myfancypdfinvoices.service.InvoiceService;
+import com.pankaj.myfancypdfinvoices.service.UserService;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
+
+@Configuration
+public class MyFancyPdfInvoicesApplicationConfiguration {
+     @Bean
+     @Scope(value = ConfigurationBeanFactory.SCOPE_PROTOTYPE
+     public UserService userService() {
+        return new UserService();
+    }
+
+    @Bean
+    public InvoiceService invoiceService(UserService userService) {
+        return new InvoiceService(userService);
+    }
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+}
+
+What changed?
+
+@Bean
+@Scope(value = ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+public UserService userService() {
+    return new UserService();
+}
+
+You need to add the @Scope annotation to your userService method and give it a value of ConfigurableBeanFactory.SCOPE_PROTOTYPE, which is really just a shorthand for the string "prototype".
+
+What is the difference between singleton and prototype beans?
+
+Instead of creating just one instance of your UserService, Spring will now create and return you a completely new UserService, every time you call ctx.getBean(). And as you might have guessed already, if you were to use the @Scope annotation without a specific value, this would imply a singleton value, or ConfigurableBeanFactory.SCOPE_SINGLETON.
+
+4. Checkpoint: Prototypes
+
+Restart your application, leaving in the three System.out.println lines. You should now see something like this:
+
+com.pankaj.myfancypdfinvoices.service.UserService@1643d68f
+com.pankaj.myfancypdfinvoices.service.UserService@186978a6
+com.pankaj.myfancypdfinvoices.service.UserService@2e029d61
+
+The object reference id changed every time you called ctx.getBean(UserService.class), as expected. It is completely different objects.
+
+5. The issue with prototypes
+
+Before we talk a bit more about singleton vs prototypes, let’s have a look at a tiny caveat when mixing the two scopes. It might look a bit non-sensical for now, but add a getter for the userService to your invoiceService.
+
+package com.pankaj.myfancypdfinvoices.service;
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.model.User;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+public class InvoiceService {
+
+    private final UserService userService;
+
+    private List<Invoice> invoices = new CopyOnWriteArrayList<>();
+
+    public InvoiceService(UserService userService) {
+        this.userService = userService;
+    }
+
+    public List<Invoice> findAll() {
+        return invoices;
+    }
+
+    public Invoice create(String userId, Integer amount) {
+        User user = userService.findById(userId);
+        if (user == null) {
+            throw new IllegalStateException();
+        }
+
+
+        // TODO real pdf creation and storing it on network server
+        Invoice invoice = new Invoice(userId, amount, "http://www.africau.edu/images/default/sample.pdf");
+        invoices.add(invoice);
+        return invoice;
+    }
+
+    public UserService getUserService() {
+        return userService;
+    }
+}
+public UserService getUserService() {
+    return userService;
+}
+Notice the getter at the end.
+
+Then go back to the MyFancyPdfInvoicesServlet and adjust it like so.
+
+@Override
+public void init() throws ServletException {
+    AnnotationConfigApplicationContext ctx
+            = new AnnotationConfigApplicationContext(MyFancyPdfInvoicesApplicationConfiguration.class);
+    this.userService = ctx.getBean(UserService.class);
+    this.objectMapper = ctx.getBean(ObjectMapper.class);
+    this.invoiceService = ctx.getBean(InvoiceService.class);
+
+    System.out.println(ctx.getBean(UserService.class));
+    System.out.println(ctx.getBean(UserService.class));
+    System.out.println(ctx.getBean(UserService.class));
+
+    System.out.println(ctx.getBean(InvoiceService.class).getUserService());
+    System.out.println(ctx.getBean(InvoiceService.class).getUserService());
+    System.out.println(ctx.getBean(InvoiceService.class).getUserService());
+}
+In addition to printing out the UserService object, that you get directly from the ApplicationContext, three times, you are now also getting the InvoiceService three times and printing out its UserService.
+
+6. Checkpoint: Prototype Issues
+
+Restart your application. What do you expect you are going to see in the console?
+
+com.pankaj.myfancypdfinvoices.service.UserService@1643d68f
+com.pankaj.myfancypdfinvoices.service.UserService@186978a6
+com.pankaj.myfancypdfinvoices.service.UserService@2e029d61
+
+com.pankaj.myfancypdfinvoices.service.UserService@482d776b
+com.pankaj.myfancypdfinvoices.service.UserService@482d776b
+com.pankaj.myfancypdfinvoices.service.UserService@482d776b
+The first three times, you get three different UserServices. But when you access the UserService through the InvoiceService, you will always get the same UserService back.
+
+That’s because the InvoiceService is a singleton and only created once, including all its dependencies. Keep that in mind.
+
+There are workarounds for this, mainly Scoped Proxies and Method Injection. If you are interested in how both options work, read the corresponding numbers in this article(https://www.baeldung.com/spring-inject-prototype-bean-into-singleton).
+
+7. To use Singletons or Prototypes?
+
+To use Singletons or Prototypes?
+As mentioned before, most Spring applications will use the default, i.e. singletons, for almost all beans. That’s why it was made the default.
+
+There is, however, a speed difference in both scopes, in that prototypes always need to be constructed anew, whereas Spring only has to construct singletons once.
+
+Still, newer dependency injection frameworks like Dagger are using prototype by default and hence ignoring the potential speed difference between the two approaches.
+
+The gist: If you are using Spring, try to go with singletons as much as possible, if you can keep them thread-safe. If not, start using prototypes, but make sure to watch out for the caveat above, i.e. when you inject them into singletons.
+
+8. Additional Scopes
+
+Apart from singletons and prototypes, there are even more additional scopes, if you are using Spring MVC, Spring’s webframework. Hence they aren’t covered here as part of core Spring framework, but there’s a nice list in Spring’s Documentation on all possible @Scopes.
+
+Here’s a quick overview with simpler descriptions:
+
+Table 1. Spring Bean @Scopes
+
+Scope	            Description
+
+singleton           One instance of your object.
+
+prototype           Multiple instances of your object.
+
+request             An instance of your object per request. Only valid for 
+
+web-aware ApplicationContexts.
+
+
+
+
+session             An instance of your object per http session. Only valid for
+
+web-aware ApplicationContexts.
+
+application         An instance of your object per servlet context. Only valid 
+
+for web-aware ApplicationContexts.
+
+
+websocket           An instance of your object per web socket. Only valid for 
+
+web-aware ApplicationContexts.
+
+The Gist:
+
+Your author has used request scoped beans in a fair amount of projects, providing easy access to the IP (which is trickier for proxies and CDN’s than you’d think!) or the country/continent information of the user. Or the rarer shopping cart bean in a session context. But in most projects, use-cases for these additional bean scopes are rather rare.
+
+Cleanup
+Before continuing, make sure to delete the System.out.println lines from your Servlet, as well as the getter from your InvoiceService.

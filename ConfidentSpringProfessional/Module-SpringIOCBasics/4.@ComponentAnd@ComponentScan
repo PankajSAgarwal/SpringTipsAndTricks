@@ -1,0 +1,136 @@
+1. So far you explicitly had to write @Bean factory methods in your @Configuration class.
+
+Wouldn’t it be much nicer if you were to get rid of them and Spring somehow figured out what @Beans your application consists of?
+
+This is where two annotations, @Component and @ComponentScan come in.
+
+2.
+
+• Open up your InvoiceService and UserService classes and annotate them with the @Component annotation. Put the annotations directly on the classes, not on methods.
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.model.User;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+public class InvoiceService {
+import com.pankaj.myfancypdfinvoices.model.User;
+import org.springframework.stereotype.Component;
+
+import java.util.UUID;
+
+//
+
+@Component
+public class UserService {
+
+• The annotation @Component tells Spring that it should turn your UserService and your InvoiceService into @Beans, once it finds them, so it is a direct replacement for the @Bean method you wrote earlier. How does Spring find your classes?
+
+• It needs to scan your classpath, which it does not do by default. You need to enable that behavior, by adding the @ComponentScan annotation to your Spring configuration class.
+
+package com.pankaj.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@ComponentScan
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+}
+
+3. Let’s break this down.
+
+@ComponentScan
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+• Again, you’re putting the @ComponentScan annotation directly on the class, not a method.
+
+@Bean
+public ObjectMapper objectMapper() {
+    return new ObjectMapper();
+}
+
+• You can remove the @Bean methods for your UserService and InvoiceService, as the beans are being automatically created, now.
+
+• You, however, still need the ObjectMapper @Bean method, because Jackson is a third-party library and you cannot simply add @Component on the original ObjectMapper class.
+
+• Takeaway: If you want to create Spring beans from 3rd party libraries that don’t offer explicit Spring support, you will have to fall-back to @Bean methods.
+
+3. Checkpoint: @ComponentScan and @Component
+
+Restart your application. Does it still work?
+
+It shouldn’t. Instead, you should get an exception on startup:
+
+...
+Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'com.marcobehler.myfancypdfinvoices.service.UserService' available
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.getBean(DefaultListableBeanFactory.java:352)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.getBean(DefaultListableBeanFactory.java:343)
+	at org.springframework.context.support.AbstractApplicationContext.getBean(AbstractApplicationContext.java:1127)
+	at com.marcobehler.myfancypdfinvoices.web.MyFancyPdfInvoicesServlet.init(MyFancyPdfInvoicesServlet.java:30)
+	at javax.servlet.GenericServlet.init(GenericServlet.java:158)
+	at org.apache.catalina.startup.Tomcat$ExistingStandardWrapper.loadServlet(Tomcat.java:1213)
+	at org.apache.catalina.core.StandardWrapper.load(StandardWrapper.java:983)
+	at org.apache.catalina.core.StandardContext.loadOnStartup(StandardContext.java:4864)
+	at org.apache.catalina.core.StandardContext.startInternal(StandardContext.java:5173)
+	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:183)
+
+• Even though you annotated your configuration class with @ComponentScan, and your services with @Component, it looks like Spring cannot find your beans. 
+Why is that?
+
+4.  @ComponentScan Revisited
+
+• The answer is, that @ComponentScan, by default, only scans the package and all the sub-packages of its annotated class.
+
+• Currently, this would be com.pankaj.myfancypdfinvoices.context. And apart from the configuration class, there are no other Spring annotated classes inside that package or any sub-package.
+
+• This means you need to tell the @ComponentScan package to scan different packages, preferably your root package: com.pankaj.myfancypdfinvoices.
+
+• Change your configuration class to read like so:
+
+@ComponentScan(basePackageClasses = ApplicationLauncher.class)
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+• You are setting the basePackageClass attribute to ApplicationLauncher. Your ApplicationLauncher lives inside the root package, and specifying it as base class will tell Spring to scan that package and all the sub-packages the class lives in.
+
+(You could have also specified the package itself as String, via the basePackages attribute on the annotation, but that wouldn’t have been type-safe. So, if you have a class living in your package root, it is advised to use that instead.)
+
+5. Checkpoint: @ComponentScan and @Component
+
+Restart your application, now. Are you still getting an error message?
+
+Nope, you should be able to GET/POST to your JSON endpoints, again. Great!
+
+If that is the case, one last note before you continue.
+
+6. Side Note: Spring Boot & @ComponentScan
+
+• If you are used to working with Spring Boot, you might have never used @ComponentScan directly. But, the @SpringBootApplication annotation, which every Spring Boot application needs, is a meta annotation which includes the @ComponentScan annotation.
+
+• Here’s what its original source code looks like. Ignore the added filters on the @ComponentScan annotation for now, that is a more advanced topic. 
+
+• What is important for now, is to understand that @SpringBootApplication IS (also) a @ComponentScan.
+
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@SpringBootConfiguration
+@EnableAutoConfiguration
+@ComponentScan(excludeFilters = { @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+		@Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class) })
+public @interface SpringBootApplication {
+
+
+• Developers usually wonder why Spring Boot can’t find @Controllers or @RestControllers: It’s because they were put in the wrong package and aren’t scanned in by @ComponentScan.
+Keep that in mind.

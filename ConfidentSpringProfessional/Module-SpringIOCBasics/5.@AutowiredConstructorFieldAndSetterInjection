@@ -1,0 +1,277 @@
+      @Autowired, Constructor, Field and Setter Injection
+----------------------------------------------------------------
+1. Constructor Injection
+
+Let’s have a closer look at how you did dependency injection, so far.
+
+@Bean
+public InvoiceService invoiceService(UserService userService) {
+    return new InvoiceService(userService);
+}
+
+• At the very beginning, you wrote a @Bean method for your InvoiceService (and all other services) in your MyFancyPdfInvoicesApplicationConfiguration class. The InvoiceService has a constructor which expects an UserService, i.e. it has a dependency on that service.
+
+• And when you call new InvoiceService(userService), you simply pass in the userService method parameter, which Spring will understand to resolve: You never call that factory method yourself, but Spring does. And when Spring calls it, it already knows about the UserService, because there’s another factory method for it and it can inject it!
+
+• Then, you introduced @ComponentScan and @Component
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.model.User;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+public class InvoiceService {
+
+    private List<Invoice> invoices = new CopyOnWriteArrayList<>();
+
+    private final UserService userService;
+
+    public InvoiceService(UserService userService) {
+        this.userService = userService;
+    }
+
+• Your InvoiceService has one constructor, which needs a UserService. But with @ComponentScan, how does that UserService get passed into the InvoiceService?
+
+• The answer is, that Spring is smart enough to read in your class AND its constructors and know: "Hey, I know how to create UserServices, so let’s pass them into the InvoiceService automatically" - without you having to worry about it.
+
+• In older Spring versions (before Spring 4.3) you had to specifically mark these constructor dependencies with the @Autowired annotation, which you do not need anymore in newer Spring versions, as the injection is now implicit and as long as you don’t have multiple, unambiguous constructors which could be used to construct your object.
+
+So, the code above is equivalent to the following:
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.model.User;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+public class InvoiceService {
+
+    private List<Invoice> invoices = new CopyOnWriteArrayList<>();
+
+    private final UserService userService;
+
+    @Autowired
+    public InvoiceService(UserService userService) {
+        this.userService = userService;
+    }
+
+• The @Autowired annotation was needed (and can still be used) to signal Spring it needs to inject the correct dependencies. If you had multiple constructors, you would have to mark one of them with the @Autowired annotation, so Spring needs to know which one to use.
+
+• Speaking of @Autowired, you might already have used it in your own Spring projects. But constructor injection is not the only way where you can use it. Let’s have a look at the other, possible ways.
+
+2. Field Injection
+
+Rewrite your InvoiceService, so it looks like this:
+
+package com.pankaj.myfancypdfinvoices.service;
+
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.model.User;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+public class InvoiceService {
+
+    private List<Invoice> invoices = new CopyOnWriteArrayList<>();
+
+    @Autowired
+    private UserService userService;
+
+
+    public List<Invoice> findAll() {
+        return invoices;
+    }
+
+    public Invoice create(String userId, Integer amount) {
+        User user = userService.findById(userId);
+        if (user == null) {
+            throw new IllegalStateException();
+        }
+
+
+        // TODO real pdf creation and storing it on network server
+        Invoice invoice = new Invoice(userId, amount, "http://www.africau.edu/images/default/sample.pdf");
+        invoices.add(invoice);
+        return invoice;
+    }
+}
+
+• What changed?
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.model.User;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+public class InvoiceService {
+
+    private List<Invoice> invoices = new CopyOnWriteArrayList<>();
+
+    @Autowired
+    private UserService userService;
+
+• You removed the constructor and the final modifier of your field and annotated it directly with the @Autowired annotation. Just like with constructor injection, Spring will be smart enough to construct a UserService and then inject the dependencies directly into the fields. That’s why this method is called field injection.
+
+• One of the drawbacks of field injection (and you’ll learn more about this at the end of this lesson), is that it basically hides what dependencies your class needs and you cannot easily instantiate your class outside of a Spring context anymore.
+
+// constructor injection makes the dependency explicit
+new InvoiceService(userService)
+
+// vs
+
+// field injection lets you create new instances, but hides the fact that you still need to set a userService
+new InvoiceService()
+
+3. Checkpoint: Field Injection
+
+Re-run your application. Make sure it still works and that you can access the REST endpoints just fine!
+
+4. Setter Injection
+
+• Rewrite your InvoiceService so it looks like this:
+
+package com.pankaj.myfancypdfinvoices.service;
+
+
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.model.User;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+public class InvoiceService {
+
+    private List<Invoice> invoices = new CopyOnWriteArrayList<>();
+
+    private UserService userService;
+
+    public List<Invoice> findAll() {
+        return invoices;
+    }
+
+    public Invoice create(String userId, Integer amount) {
+        User user = userService.findById(userId);
+        if (user == null) {
+            throw new IllegalStateException();
+        }
+
+
+        // TODO real pdf creation and storing it on network server
+        Invoice invoice = new Invoice(userId, amount, "http://www.africau.edu/images/default/sample.pdf");
+        invoices.add(invoice);
+        return invoice;
+    }
+
+
+    @Autowired
+    public void setUserService(UserService userService) {
+        this.userService = userService;
+    }
+}
+
+• What changed?
+
+@Autowired
+public void setUserService(UserService userService) {
+    this.userService = userService;
+}
+
+• You simply added a setter for your UserService field, and instead of putting @Autowired on the field, you are putting it on the setter.
+
+• Again, the advantage of setter injection vs field injection, is when you are using your class outside of a Spring context, e.g. for testing. Why? Because with direct field injection, you cannot set e.g. the userService yourself!
+
+InvoiceService invoiceService = new InvoiceService()
+invoiceService.setUserService(..) // compile error if there is no setter!
+
+5. Checkpoint: @Autowired and Setter Injection
+Restart your application and make sure it still works as expected.
+
+6. What injection style to use?
+
+• There have been many arguments about what injection style is best (constructor, field, method), with many, strong voices.
+
+http://olivergierke.de/2013/11/why-field-injection-is-evil/
+https://blog.marcnuri.com/field-injection-is-not-recommended/
+
+• The pragmatic approach to the injection styles is this:
+
+  - Be consistent, whatever style you are using. So don’t mix constructor, field, setter and method injection throughout your project.
+
+  - Use the official Spring documentation’s(https://docs.spring.io/spring/docs/4.3.25.RELEASE/spring-framework-reference/htmlsingle/) approach: Constructor-based or setter-based DI, which boils down to:
+
+  a. Use constructor injection for mandatory dependencies of your class.
+
+  b. Use field injection/setter injection for optional dependencies and safeguard their access with if-null checks.
+
+• Note that worrying about optional dependencies is primarily essential when using Spring classes outside a Spring context, as @Autowired will always make sure to inject the dependency, be it through constructors, fields or setters - or throw an exception if it fails to do so.
+
+7. Cleanup
+
+Before you continue with the next lesson, rewrite your InvoiceService to use constructor injection again, as this will be the injection style you will be using going forward. Your class should look like this (without @Autowired).
+
+package com.pankaj.myfancypdfinvoices.service;
+
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.model.User;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+public class InvoiceService {
+
+    private List<Invoice> invoices = new CopyOnWriteArrayList<>();
+
+    private final UserService userService;
+
+    public InvoiceService(UserService userService) {
+        this.userService = userService;
+    }
+
+    public List<Invoice> findAll() {
+        return invoices;
+    }
+
+    public Invoice create(String userId, Integer amount) {
+        User user = userService.findById(userId);
+        if (user == null) {
+            throw new IllegalStateException();
+        }
+
+
+        // TODO real pdf creation and storing it on network server
+        Invoice invoice = new Invoice(userId, amount, "http://www.africau.edu/images/default/sample.pdf");
+        invoices.add(invoice);
+        return invoice;
+    }
+}
+
+• Make sure your application still boots up and you can access your REST endpoints.
+
+
+
+
+
+
+

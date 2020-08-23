@@ -1,0 +1,294 @@
+1. Although not strictly part of Spring’s core dependency injection container, there’s an additional core Spring topic you will need to know about. Properties & Profiles.
+
+• One popular example for properties: If your program is going to access a database, you will very likely have different database URLs/users & passwords for different environments (development, test, prod etc.).
+
+• So, how does Spring’s property support work?
+
+2. Creating a .properties file
+
+Create the following application.properties under src/main/resources/ , which means it will be bundled up with your application’s .jar file after you build it.
+
+cdn.url=https://dev-cdn.pankajagarwal.com
+
+The properties file contains one property, which is the URL to the CDN where your generated PDF invoices will get stored.
+
+3.  @PropertySources
+
+To make Spring read in those properties, you need a slight change to your SpringConfiguration class.
+
+
+package com.pankaj.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pankaj.myfancypdfinvoices.ApplicationLauncher;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+
+@Configuration
+@ComponentScan(basePackageClasses = ApplicationLauncher.class)
+@PropertySource("classpath:/application.properties")
+//@PropertySource("classpath:/someOtherFile.properties")
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+}
+
+• What changed?
+
+@PropertySource("classpath:/application.properties")
+//@PropertySource("classpath:/someOtherFile.properties")
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+With the help of the @PropertySource annotation, Spring will try and read in properties files for you. You can put in any Spring-Resources specific string here, like file:/, classpath:/ or even https:/. For more information on the syntax, check out this link.(https://www.pankaj.com/guides/spring-framework#spring-resources)
+
+Additionally, you can provide multiple @PropertySources, in case you want to read in properties from multiple locations. 
+
+4. @Value
+
+• Now open up your InvoiceService and let’s try to inject your property straight into that bean. How? With the help of the @Value annotation.
+
+package com.pankaj.myfancypdfinvoices.service;
+
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.model.User;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+public class InvoiceService {
+
+    private List<Invoice> invoices = new CopyOnWriteArrayList<>();
+
+    private final UserService userService;
+    private final String cdnUrl;
+
+    public InvoiceService(UserService userService, @Value("${cdn.url}") String cdnUrl) {
+        this.userService = userService;
+        this.cdnUrl = cdnUrl;
+    }
+
+    @PostConstruct
+    public void init() {
+        System.out.println("Fetching PDF Template from S3...");
+        // TODO download from s3 and save locally
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        System.out.println("Deleting downloaded templates...");
+        // TODO actual deletion of PDFs
+    }
+
+    public List<Invoice> findAll() {
+        return invoices;
+    }
+
+    public Invoice create(String userId, Integer amount) {
+        User user = userService.findById(userId);
+        if (user == null) {
+            throw new IllegalStateException();
+        }
+
+        // TODO real pdf creation and storing it on network server
+        Invoice invoice = new Invoice(userId, amount, cdnUrl + "/images/default/sample.pdf");
+        invoices.add(invoice);
+        return invoice;
+    }
+}
+
+• Let’s break down the changes.
+
+private final String cdnUrl;
+
+public InvoiceService(UserService userService, @Value("${cdn.url}") String cdnUrl) {
+    this.userService = userService;
+    this.cdnUrl = cdnUrl;
+}
+
+• Similarly to @Autowired you can inject properties that exist in any of your specified @PropertySources into any Spring bean, with the @Value annotation. Make sure to use the ${} syntax when specifying the key, it’s a common cause of error.
+
+• If such a property does not exist, Spring will, by default, throw an exception.
+
+// TODO real pdf creation and storing it on network server
+Invoice invoice = new Invoice(userId, amount, cdnUrl + "/images/default/sample.pdf");
+invoices.add(invoice);
+return invoice;
+
+• Instead of returning the fixed URL, you are now prepending the injected cdnURL to the invoice URL.
+
+• Checkpoint: @Value
+
+    - Restart your application and create a new invoice with any of the two rest endpoints.
+
+POST http://localhost:8080/invoices?user_id=franz&amount=60
+
+HTTP/1.1 200
+Content-Type: application/json;charset=UTF-8
+Date: Mon, 29 Jun 2020 15:34:01 GMT
+Keep-Alive: timeout=20
+Connection: keep-alive
+
+{
+    "id": "9f53ec2e-44cf-4506-8087-dc9c98f05c5b",
+    "amount": 60,
+    "user_id": "franz",
+    "pdf_url": "https://dev-cdn.pankaj.com/images/default/sample.pdf"
+}
+
+• You should see that the pdf_url contains the property value that you set. If you think that is too good to be true, try changing the property a couple of times, restart the application (!) and test out the REST endpoint again.
+
+• Note, that Spring, by default, does not support hot reloading of the properties, i.e. changing the properties while the application is still running - that’s why you need to restart.
+
+5. Profiles
+
+• Properties are one part of Spring’s environment, another part is @Profiles. You can use profiles if you want different properties or even completely different Spring beans in different environments.
+
+Example: Imagine that you want to pre-fill the InvoiceService with a couple of dummy invoices, but only during development, not production. There are many ways to do this, but one would be to have an environment-specific bean like this.
+
+package com.pankaj.myfancypdfinvoices.service;
+
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.PostConstruct;
+
+@Service
+@Profile("dev")
+public class DummyInvoiceServiceLoader {
+
+    private final InvoiceService invoiceService;
+
+    public DummyInvoiceServiceLoader(InvoiceService invoiceService) {
+        this.invoiceService = invoiceService;
+    }
+
+    @PostConstruct
+    public void setup() {
+        System.out.println("Creating dev invoices...");
+        invoiceService.create("someUserId", 50);
+        invoiceService.create("someOtherUserId", 100);
+    }
+}
+
+• Let’s break this down.
+
+    -   @Service
+        
+        • You haven’t seen the @Service annotation before. It is the same as the @Component annotation, just with a stronger semantic meaning (this is a service). So, you could have used @Component instead. The @Service annotation is mentioned here for completeness' sake.
+
+    -   @Profile("dev")
+
+        • The DummyInvoiceServiceLoader is a normal Spring bean, but it is annotated with the @Profile annotation, which means the bean will only exist whenever you startup Spring with the dev environment You’ll find out how to do that in a moment.
+
+    • The DummyInvoiceServiceLoader uses normal constructor injection.
+
+        private final InvoiceService invoiceService;
+
+        public DummyInvoiceServiceLoader(InvoiceService invoiceService) {
+            this.invoiceService = invoiceService;
+        }
+
+• The @PostConstruct method simply creates two dummy invoices on startup.
+
+    That’s it. You now need to find out how you can activate a certain environment.
+
+    @PostConstruct
+    public void setup() {
+        System.out.println("Creating dev invoices...");
+        invoiceService.create("someUserId", 50);
+        invoiceService.create("someOtherUserId", 100);
+    }
+
+6. Checkpoint: Profiles
+
+• Restart your application and have a look at the server logs and look for the System.out.println("Creating dev invoices…​"); statement. You shouldn’t see anything and your JSON endpoints shouldn’t return any invoices whatsoever. Try it out.
+
+• That is because you’re not running the Spring application in the right profile.
+
+• Now, restart your program with the VM Option: -Dspring.profiles.active=dev set. Note, this is case-sensitive. (Also, here’s a list of alternative ways(https://www.baeldung.com/spring-profiles#2-using-springactiveprofile) of how you can specify that profile)
+
+• You should now see this in the console, as your Spring application will run in profile dev!
+
+Creating dev invoices...
+
+• And when calling your /invoices endpoint you should see two invoices returned to you. Exactly what you wanted and what profiles are all about.
+
+7. @PropertySources Revisited
+
+• Create another properties file in your project under src/main/resources and call it application-dev.properties.
+
+cdn.url=https://some-dev-url.pankajagarwal.com
+
+• Then go to your MyFancyPdfInvoicesApplicationConfiguration class and add the following, additional @PropertySource.
+
+package com.pankaj.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pankaj.myfancypdfinvoices.ApplicationLauncher;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+
+@Configuration
+@ComponentScan(basePackageClasses = ApplicationLauncher.class)
+@PropertySource("classpath:/application.properties")
+@PropertySource(value = "classpath:/application-${spring.profiles.active}.properties"
+                    , ignoreResourceNotFound = true)
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+}
+
+• What changed?
+
+@PropertySource("classpath:/application.properties")
+@PropertySource(value = "classpath:/application-${spring.profiles.active}.properties"
+                    , ignoreResourceNotFound = true)
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+• You added a new @PropertySource, which contains a placeholder: The currently activated spring profile(s), that you can e.g. specify on the command line like before. Remember, the order of these PropertySources is important, with the one specified at the bottom having precedence (i.e. overwriting the same properties) over the ones at the top.
+
+• Also, you want to make sure that your Spring program does not throw an exception, if the specified file does not exist, hence you set the ignoreResourceNotFound flag to true.
+
+• Checkpoint: PropertySources Revisited
+
+Restart your application and see what happens when you create another invoice.
+
+POST http://localhost:8080/invoices?user_id=franz&amount=60
+
+HTTP/1.1 200
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Sat, 15 Feb 2020 15:48:48 GMT
+Keep-Alive: timeout=20
+Connection: keep-alive
+
+{
+    "id": "a906adfa-fd4f-441d-9f6d-4c1963a3a4d3",
+    "amount": 60,
+    "user_id": "franz",
+    "pdf_url": "https://some-dev-url.pankajagarwal.com/images/default/sample.pdf"
+}
+
+• You can see that the pdf_url is different because it is now getting picked up from the application-dev.properties file, which overrides the application.properties file, respecting the order of the @PropertySources.
+
+
+
+
+
+

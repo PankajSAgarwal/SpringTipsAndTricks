@@ -1,0 +1,231 @@
+1. Every Spring Application consists of a central class .
+Spring calls it ApplicationContext
+
+package com.pankaj.myfancypdfinvoices.context;
+import org.springframework.context.annotation.Configuration
+
+@Configuration
+public class MyFancyPDFInvoicesApplicationConfiguration{
+
+}
+
+• Spring needs a configuration class in order to construct an ApplicationContext. This is such a configuration class. It does not need to implement a specific interface or extend a specific class. It also can have any name you want, though something ending with Configuration makes sense.
+
+
+package com.pankaj.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pankaj.myfancypdfinvoices.services.InvoicesService;
+import com.pankaj.myfancypdfinvoices.services.UserService;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration
+
+@Configuration
+public class MyFancyPDFInvoicesApplicationConfiguration{
+  @Bean
+  public UserService userService(){
+    return new UserService();
+  }
+
+  @Bean
+  public InvoicesService invoicesService(UserService userService){
+    return new InvoicesService(userService);
+  }
+
+  @Bean
+  public ObjectMapper objectMapper(){
+    return new ObjectMapper();
+  }
+}
+
+ Lets break this down
+
+a. 
+
+@Bean
+public UserService userService() {
+    return new UserService();
+}
+
+Your application needs a UserService. So, in your configuration class, you create a method that returns a UserService, annotated with the @Bean annotation. It tells Spring that, on ApplicationContext startup (more on that in a second), it should create one instance of your UserService, by calling that very @Bean method.
+
+The name of the method does not matter, but the return type of the method does. Think of these methods, for now, as a factory method.
+
+
+b. 
+
+@Bean
+public InvoiceService invoiceService(UserService userService) {
+    return new InvoiceService(userService);
+}
+
+The same with your InvoiceService. You will have a @Bean method, that creates new InvoiceServices. But, InvoiceService has a dependency on a UserService.
+
+The nice thing about Spring is, that you can define the UserService as method parameter, and Spring is smart enough to understand that it needs to feed the UserService bean (that you are creating with the userService() method) into that method as parameter!
+
+c.
+
+@Bean
+public ObjectMapper objectMapper() {
+    return new ObjectMapper();
+}
+
+There’s nothing special about the ObjectMapper, it is just another @Bean method.
+
+Note:This method of configuring Spring beans is called Spring’s explicit Java configuration and it looks very similar to the application class you wrote above.
+
+2. A quick side-note: Spring XML Configurations
+
+Historically, you did not write Java classes to configure Spring. Instead, you wrote XML files. The equivalent XML configuration file for your MyFancyPdfInvoicesApplicationConfiguration is this:
+
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <!-- this is the legacy way of configuring spring -->
+  <bean id="userService" class="com.pankaj.myfancypdfinvoices.services.UserService"/>
+
+    <bean id="invoiceService" class="com.pankaj.myfancypdfinvoices.services.InvoiceService">
+        <constructor-arg value="userService"/>
+    </bean>
+
+    <bean id="objectMapper" class="com.fasterxml.jackson.databind.ObjectMapper"/>
+</beans>
+
+From a technical perspective, what happens under the hood with these two different ways of configuring Spring (XML vs Java) is the same.
+
+Though over the past couple of years, the Java configuration style has emerged as the default and frameworks like Spring Boot use it exclusively and its recommended that you stick to Java configuration.
+
+You will, however, find XML configuration in a lot of legacy projects.
+
+3. Instantiating your first ApplicationContext
+
+You cannot do much with the @Configuration class itself, rather you need to construct an ApplicationContext from it, as mentioned earlier. Afterwards, you need to refactor your servlet and change it to make use of this context.
+
+As your configuration class is annotated with Spring’s @Bean and @Configuration annotations, you’ll want to instantiate a AnnotationConfigApplicationContext. If you used Springs XML configuration file from above, you would instantiate a ClasspathXMLApplicationContext instead, leading to the same result.
+
+This is how you need to change your servlet.
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pankaj.myfancypdfinvoices.context.Application;
+import com.pankaj.myfancypdfinvoices.context.MyFancyPdfInvoicesApplicationConfiguration;
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.services.InvoiceService;
+import com.pankaj.myfancypdfinvoices.services.UserService;
+import org.spingframework.context.annotation.AnnotationConfigApplicationContext;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.List;
+
+public class MyFancyPdfInvoicesServlet extends HttpServlet {
+
+  private UserService userService;
+  private InvoicesService invoicesService;
+  private ObjectMapper objectMapper;
+
+  public void init() throws ServletException{
+    AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext(MyFancyPDFInvoicesApplicationConfiguration.class);
+
+    this.userService = ctx.getBean(UserService.class);
+    this.invoicesService = ctx.getBean(InvoicesService.class);
+    this.objectMapper = ctx.getBean(ObjectMapper.class);
+  }
+
+  @Override
+  public void doPost(HttpServlet request,HttpServletResponse response) throws IOException {
+
+    if(request.getRequestURI().equalsIgnoreCase("/invoices")){
+
+      String userId = request.getParameter("user_id");
+      Integer amount = Integer.valueof(request.getParameter("amount"));
+
+      Invoice invoice = invoicesService.create(userId, amount);
+      response.setContentType("application/json;charset=UTF-8");
+
+      String json = objectMapper.writeValueAsString(invoice);
+      response.getWriter().print(json);
+    }else{
+      response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+    }
+  }
+
+    @Override
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        if (request.getRequestURI().equalsIgnoreCase("/")) {
+            response.setContentType("text/html; charset=UTF-8");
+            response.getWriter().print(
+                    "<html>\n" +
+                            "<body>\n" +
+                            "<h1>Hello World</h1>\n" +
+                            "<p>This is my very first, embedded Tomcat, HTML Page!</p>\n" +
+                            "</body>\n" +
+                            "</html>");
+        } else if (request.getRequestURI().equalsIgnoreCase("/invoices")) {
+            response.setContentType("application/json; charset=UTF-8");
+            List<Invoice> invoices = invoiceService.findAll();
+            response.getWriter().print(objectMapper.writeValueAsString(invoices));
+        }
+    }
+}
+
+Lets break this down
+
+a.
+
+@Override
+public void init() throws ServletException {
+    AnnotationConfigApplicationContext ctx
+            = new AnnotationConfigApplicationContext(MyFancyPdfInvoicesApplicationConfiguration.class);
+    this.userService = ctx.getBean(UserService.class);
+    this.objectMapper = ctx.getBean(ObjectMapper.class);
+    this.invoiceService = ctx.getBean(InvoiceService.class);
+}
+
+Every HTTPServlet has an init() method which you can override to do something whenever the servlet gets started. As mentioned before, you want to create an ApplicationContext. You can do that by simply calling new AnnotationConfigApplicationContext() and passing in your configuration class.
+
+Spring reads in your @Configuration class and is smart enough to construct your @beans/services, that it can give back to you whenever you call ctx.getBean(someClass).
+
+b.
+
+private UserService userService;
+private ObjectMapper objectMapper;
+private InvoiceService invoiceService;
+
+You simply save the beans from your ApplicationContext as fields in your servlet.
+
+c.
+
+Invoice invoice = invoiceService.create(userId, amount);
+
+response.setContentType("application/json; charset=UTF-8");
+String json = objectMapper.writeValueAsString(invoice);
+response.getWriter().print(json);
+
+response.setContentType("application/json; charset=UTF-8");
+List<Invoice> invoices = invoiceService.findAll();
+response.getWriter().print(objectMapper.writeValueAsString(invoices));
+
+And use those fields, instead of accessing your services via the (old) Application class you wrote in the previous module.
+
+Make sure to now delete your old Application class, as it is not being used anymore. You should not get any compile errors.
+
+That is enough to Springify your application.
+
+Checkpoint: Springifying the application
+This is exciting! Let’s see if your application still works after you springified it.
+
+Restart the application and make sure you can still POST/GET your endpoints! Invoicing should work as before.
+
+
+
+
+
+
