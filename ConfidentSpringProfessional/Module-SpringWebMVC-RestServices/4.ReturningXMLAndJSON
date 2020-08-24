@@ -1,0 +1,88 @@
+1. In the previous lesson, you added the Jackson JSON library to your classpath and Spring was able to convert between Java and JSON.
+
+Imagine your MyFancyPdfInvoices REST services are also called from another software, which expects XML, instead of JSON.
+
+How would you, additionally, make Spring convert your Java objects between Java and XML? And how would you tell Spring which format you want?
+
+2. Maven Dependencies
+
+• First of all, let’s add a library onto the classpath that can also convert between Java and XML. There’s many of them, but Jackson itself offers an additional XML library, so you are simply going to use that.
+
+<dependency>
+    <groupId>com.fasterxml.jackson.dataformat</groupId>
+    <artifactId>jackson-dataformat-xml</artifactId>
+    <version>2.11.0</version>
+</dependency>
+
+•Without doing anything else, restart your application now and excute another GET request against your /invoices endpoint.
+
+What happened?
+
+GET http://localhost:8080/invoices
+Accept: */*
+The response looks different. You do not get a JSON array back, but rather an XML list!
+
+<List>
+    <item>
+        <id>8891de1a-7557-4743-ba4f-c00018030ff7</id>
+        <amount>50</amount>
+        <user_id>someUserId</user_id>
+        <pdf_url>https://some-dev-url.marcobehler.com/images/default/sample.pdf</pdf_url>
+    </item>
+    <item>
+        <id>bc4ac8a0-2c38-445d-a79b-8ca43b92a06f</id>
+        <amount>100</amount>
+        <user_id>someOtherUserId</user_id>
+        <pdf_url>https://some-dev-url.marcobehler.com/images/default/sample.pdf</pdf_url>
+    </item>
+</List>
+
+Why is that?
+
+• Think back to @EnableWebMVC. It tried to look at your classpath, i.e. what libraries you have added to your project. And if it finds the JSON library, it automatically creates a Spring JSON converter. If it finds an XML library, it automatically creates an XML converter.
+
+• This means your application now has two converters (XML and JSON) and they have a certain order with different priorities.
+
+• The XML converter has a higher default priority, that is why you are now receiving XML, instead of JSON.
+
+• Ouch! But don’t worry, there’s still a way to get JSON back again.
+
+3. Content Negotiation
+
+• Note that in the previous request you sent in an Accept */* header, which tells Spring: You decide. Send me back whatever data format (XML, JSON etc.) you want, I accept literally anything (*/*).
+
+• What happens if you change that Accept header to application/json?
+
+Let’s give it a try:
+
+GET http://localhost:8080/invoices
+Accept: application/json
+The result is this:
+
+[
+    {
+        "id": "8891de1a-7557-4743-ba4f-c00018030ff7",
+        "amount": 50,
+        "user_id": "someUserId",
+        "pdf_url": "https://some-dev-url.marcobehler.com/images/default/sample.pdf"
+    },
+    {
+        "id": "bc4ac8a0-2c38-445d-a79b-8ca43b92a06f",
+        "amount": 100,
+        "user_id": "someOtherUserId",
+        "pdf_url": "https://some-dev-url.marcobehler.com/images/default/sample.pdf"
+    }
+]
+
+• You are getting JSON back again, without having had to change any code, phew! That is because Spring has the concept of content negotiation.
+
+• Spring understands what data format you send in and what you expect as a result, by looking at HTTP headers.
+
+• When sending in data to your Spring application, you need to specify the correct Content-Type header, to let Spring know it needs to convert from e.g. JSON to Java. (And Spring needs to have a converter registered, for that content-type.)
+
+• When getting data back from your Spring application, you need to have specified the correct Accept header, to let Spring know it needs to convert from Java to e.g. JSON. (Again, Spring needs to have a converter registered, for that content-type.)
+
+• This means you can also do things like sending in a request with Content-Type=application/xml and Accept=application/json, i.e. telling Spring you are sending in XML, but want JSON back. Try that out as an exercise.
+
+• The takeaway: make sure to always send in the appropriate headers, instead of hoping for Spring to send you back a default. For further reading on content negotiation, check out the official Spring documentation(https://docs.spring.io/spring/docs/current/spring-framework-reference/web.html#mvc-multiple-representations).
+

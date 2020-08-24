@@ -1,0 +1,167 @@
+1. If you already have some experience with Spring Boot, or even if you are coming from other ecosystems like the Rails/Ruby ecosystem, you will understand that you are rarely writing plain HttpServlets, nowadays.
+
+• They get the job done, but they are also a bit low-level. Spring MVC offers an abstraction on top of HttpServlets, called controllers.
+
+• It is time to learn what controllers are all about and the best way to do that is by writing your first controller.
+
+2. Writing your first Controller
+
+Inside your web package, create a controller called MyFirstSpringController.
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+@Controller
+public class MyFirstSpringController {
+
+    @GetMapping("/")
+    @ResponseBody
+    public String index() {
+        return "Hello World";
+    }
+}
+
+• Let’s break this down.
+
+@Controller
+public class MyFirstSpringController {
+
+    -   Your controller class is a normal Java class, that does not need to implement any specific interfaces or extend from another class.
+
+    -   You do however need to mark it with the @Controller annotation, so that Spring’s @ComponentScan can find it and make Spring MVC understand: This class can accept HTTP requests.
+
+@GetMapping("/")
+@ResponseBody
+public String index() {
+
+• Your controller consists of one method, which name is irrelevant. So, index() will do just fine, but you could have also called it homepage() or something similar. It is however important, to put the right annotations on that method.
+
+• @GetMapping("/") will make sure that this method is called by Spring MVC in response to HTTP GET requests, if, and only if, the request URI is equal to /. Does this sound familiar? It is basically the if-else check from your doGet method that you put into your MyFancyPdfInvoicesServlet.
+
+• You will learn about the @ResponseBody annotation later on in this lesson, but for now, the takeaway is that it makes sure to directly write, whatever your method returns, to the HttpServletOutputStream. Again, this is exactly what you did in your servlet, writing a simple string to your HttpServletOutputStream.
+
+public String index() {
+    return "Hello World";
+}
+
+• The method itself simply returns the string hello world. That’s the "web page" you are supposed to see.
+
+3. Checkpoint: Hello World
+
+• Let’s see if this worked. Restart your application, open your browser and go to http://localhost:8080.
+
+• What do you see?
+
+    - Unfortunately, you will not see your hello world string from your Spring controller. Instead, you will still see the "Hello world - This is my very first, embedded Tomcat, HTML Page!" message that your MyFancyPdfInvoicesServlet prints out.
+
+    This is to be expected.
+
+    - While you added the spring-webmvc dependency to your project and created your first controller, your Tomcat doesn’t know anything about that, yet. It only knows about your servlet.
+
+    - This means you need to replace your servlet with Spring MVC’s own servlet, called DispatcherServlet.
+
+4. Creating and registering Spring’s DispatcherServlet
+
+    • You do not need to create that DispatcherServlet from scratch. It comes bundled with Spring MVC. You only need to register it with Tomcat.
+
+    • What that servlet will do, is take the incoming HTTP request (think: http://localhost:8080) and forward it to the @Controller you just wrote. And then take whatever your controller returns, and write it to the HttpServletResponse. This is why it’s called Dispatcher Servlet, because its job is literally to dispatch requests and responses to and from @Controllers.
+
+    Not so complicated, after all?
+
+• Here’s what your new ApplicationLauncher needs to look like.
+
+package com.pankaj.myfancypdfinvoices;
+
+import com.pankaj.myfancypdfinvoices.context.MyFancyPdfInvoicesApplicationConfiguration;
+import org.apache.catalina.Context;
+import org.apache.catalina.LifecycleException;
+import org.apache.catalina.Wrapper;
+import org.apache.catalina.startup.Tomcat;
+import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.context.support.AnnotationConfigWebApplicationContext;
+import org.springframework.web.servlet.DispatcherServlet;
+
+import javax.servlet.ServletContext;
+
+public class ApplicationLauncher {
+
+    public static void main(String[] args) throws LifecycleException {
+
+        Tomcat tomcat = new Tomcat();
+        tomcat.setPort(8080);
+        tomcat.getConnector();
+
+        Context tomcatCtx = tomcat.addContext("", null);
+
+        WebApplicationContext appCtx = createApplicationContext(tomcatCtx.getServletContext());
+        DispatcherServlet dispatcherServlet = new DispatcherServlet(appCtx);
+        Wrapper servlet = Tomcat.addServlet(tomcatCtx, "dispatcherServlet", dispatcherServlet);
+        servlet.setLoadOnStartup(1);
+        servlet.addMapping("/*");
+
+        tomcat.start();
+    }
+
+    public static WebApplicationContext createApplicationContext(ServletContext servletContext) {
+        AnnotationConfigWebApplicationContext ctx = new AnnotationConfigWebApplicationContext();
+        ctx.register(MyFancyPdfInvoicesApplicationConfiguration.class);
+        ctx.setServletContext(servletContext);
+        ctx.refresh();
+        ctx.registerShutdownHook();
+        return ctx;
+    }
+}
+
+5. Let’s break this down.
+
+• WebApplicationContext appCtx = createApplicationContext(tomcatCtx.getServletContext());
+
+    -  You need to create an ApplicationContext for Spring to work. More specifically, for web applications you need to create a WebApplicationContext. As constructing one takes a couple of lines, you should extract that creation process to its own method.
+
+• DispatcherServlet dispatcherServlet = new DispatcherServlet(appCtx);
+
+    - The one and only entry point for Spring WebMVC is the so-called DispatcherServlet. As mentioned before, it will replace your own servlet and accept all incoming HTTP requests. It needs the WebApplicationContext to work, i.e. to know about your @Controllers.
+
+• Wrapper servlet = Tomcat.addServlet(tomcatCtx, "dispatcherServlet",           dispatcherServlet);
+ servlet.setLoadOnStartup(1);
+ servlet.addMapping("/*");
+
+    - You simply swap out the registration of your own Servlet with Spring’s DispatcherServlet. The name of the servlet does not really matter, but you can adjust it so it reads better.
+
+• public static WebApplicationContext createApplicationContext(ServletContext servletContext) {
+    AnnotationConfigWebApplicationContext ctx = new AnnotationConfigWebApplicationContext();
+    ctx.register(MyFancyPdfInvoicesApplicationConfiguration.class);
+    ctx.setServletContext(servletContext);
+    ctx.refresh();
+    ctx.registerShutdownHook();
+    return ctx;
+}
+    
+    - Creating the ApplicationContext is a bit more elaborate: You need to tell it about your SpringConfiguration, as well as the ServletContext and then start the ApplicationContext manually by calling refresh. Also, don’t forget the shutdown hook.
+
+    That’s it. The gist:
+
+   • The applicationContext you create will know about your @Controller and @GetMapping, because of @ComponentScanning.
+
+    • Your DispatcherServlet knows about your applicationContext, because you need to pass it into its constructor.
+
+    • Because of that, the DispatcherServlet is able to forward incoming requests to your controllers and back to the browser.
+
+6. Checkpoint: Hello World - Second Try
+
+• Restart your application, open up your browser and go to http://localhost:8080. What do you see?
+
+• Perfect, this time you should see just the "hello world" string! This means the DispatcherServlet got setup correctly and it’s routing the requests to your @Controller.
+
+This means, you can go ahead and return your invoice json objects from your @Controller now, which you’ll do in the next lesson.
+
+
+
+
+
+
+
+

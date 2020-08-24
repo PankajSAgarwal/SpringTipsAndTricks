@@ -1,0 +1,305 @@
+1. When learning about @RequestParams you saw that Spring Web MVC has rudimentary abilities to convert & validate incoming user input: The amount parameter of your createInvoice() method is an integer and if you try to send in a string, Spring will complain.
+
+Let’s try that out.
+
+2. Basic Type Conversion Validation
+
+Send in the following, invalid JSON to your /invoices endpoint.
+
+POST http://localhost:8080/invoices
+Accept: application/json
+Content-Type: application/json
+{   "amount": "this is an invalid integer",   "user_id": "someId" }
+
+• Spring will answer with a HTTP 400 Bad Request error message and in the request logs you will see something along these lines:
+
+Aug 24, 2020 10:37:50 AM org.springframework.web.servlet.handler.AbstractHandlerExceptionResolver logException
+WARNING: Resolved [org.springframework.http.converter.HttpMessageNotReadableException: JSON parse error: Cannot deserialize value of type `java.lang.Integer` from String "this is an invalid integer": not a valid Integer value; nested exception is com.fasterxml.jackson.databind.exc.InvalidFormatException: Cannot deserialize value of type `java.lang.Integer` from String "this is an invalid integer": not a valid Integer value
+ at [Source: (PushbackInputStream); line: 1, column: 14] (through reference chain: com.pankaj.myfancypdfinvoices.dto.InvoiceDto["amount"])]
+
+• The specific error message is Cannot deserialize value of type `java.lang.Integer from String "this is an invalid integer": not a valid Integer value;`. Spring complains, because it cannot convert the value to the correct type.
+
+• This is a start, but it’s also not real validation, as in: Make sure the amount must be bigger than 0 and less than a 100. For proper validation, you’ll need additional libraries.
+
+2. JSR 303/Hibernate Validation
+
+• A lot of Java validation frameworks are based on the idea of bean validation, not to be confused with Spring @Beans. Just regular Java beans, like your InvoiceDto, that you need to sprinkle with validation annotations.
+
+• One of these popular validation frameworks is called hibernate-validator, which is also the reference implementation for the Java Bean Validation specification (JSR 303).
+
+• To find out how it works, open up your pom.xml and add the following two dependencies to get started with hibernate-validator.
+
+<dependency>
+    <groupId>org.hibernate.validator</groupId>
+    <artifactId>hibernate-validator</artifactId>
+    <version>6.1.5.Final</version>
+</dependency>
+<dependency>
+    <groupId>org.glassfish</groupId>
+    <artifactId>javax.el</artifactId>
+    <version>3.0.1-b11</version>
+</dependency>
+
+• Here’s a dirty little secret. If you are missing out on the javax.el dependency, which seems superfluous at first, you will not trigger Spring’s autoconfiguration of its validation capabilities. Adding just the hibernate-validator is not enough. This tiny detail is something that has cost a lot of developers a fair amount of time.
+
+3. JSR 303 Validation Annotations
+
+Then, go to your InvoiceDto class and change it like so.
+
+package com.pankaj.myfancypdfinvoices.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import javax.validation.constraints.Max;
+import javax.validation.constraints.Min;
+import javax.validation.constraints.NotBlank;
+
+public class InvoiceDto {
+
+    @JsonProperty("user_id")
+    @NotBlank
+    private String userId;
+
+    @Min(10)
+    @Max(50)
+    private Integer amount;
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    public Integer getAmount() {
+        return amount;
+    }
+
+    public void setAmount(Integer amount) {
+        this.amount = amount;
+    }
+}
+What changed? You added a couple of validation annotations to your fields.
+
+@JsonProperty("user_id")
+@NotBlank
+private String userId;
+The @NotBlank annotation will make sure that the user_id being sent in to your REST service is not an empty string.
+
+@Min(10)
+@Max(50)
+private Integer amount;
+@Min and @Max will validate for the amount to be a valid integer between 10 and 50 (inclusive).
+
+• Now, the only thing that’s left for you to do is to tell Spring it should actually perform the validation whenever it finds these annotations.
+
+• You can do this with the following change to your MyFancyPdfInvoicesController createInvoice method.
+
+public Invoice createInvoice(@RequestBody @Valid InvoiceDto invoiceDto) {
+
+•You simply need to add the @Valid annotation to your RequestBody parameter. That is enough to tell Spring to validate the incoming object, according to the annotations you placed into the class.
+
+4. Let’s give it a try, by sending in a blank string as the user_id, as well as an amount that is lower than the specified min (10).
+
+POST http://localhost:8080/invoices
+Accept: application/json
+Content-Type: application/json
+{   "amount": 9,   "user_id": "     " }
+
+• You’ll get another Http 400 Bad Request error message, unfortunately as an HTML response, which you’ll fix later and convert to JSON.
+
+But looking at the server logs, you’ll see the following entries:
+
+Jul 01, 2020 10:11:23 AM org.springframework.web.servlet.handler.AbstractHandlerExceptionResolver logException
+WARNING: Resolved [org.springframework.web.bind.MethodArgumentNotValidException: Validation failed for argument [0] in public com.pankaj.myfancypdfinvoices.model.Invoice com.pankaj.myfancypdfinvoices.web.MyFancyPdfInvoicesController.createInvoice(com.pankaj.myfancypdfinvoices.dto.InvoiceDto) with 2 errors:
+[Field error in object 'invoiceDto' on field 'amount': rejected value [9]; codes [Min.invoiceDto.amount,Min.amount,Min.java.lang.Integer,Min]; arguments [org.springframework.context.support.DefaultMessageSourceResolvable: codes [invoiceDto.amount,amount]; arguments []; default message [amount],10]; default message [must be greater than or equal to 10]]
+[Field error in object 'invoiceDto' on field 'userId': rejected value [     ]; codes [NotBlank.invoiceDto.userId,NotBlank.userId,NotBlank.java.lang.String,NotBlank]; arguments [org.springframework.context.support.DefaultMessageSourceResolvable: codes [invoiceDto.userId,userId]; arguments []; default message [userId]]; default message [must not be blank]] ]
+You’ll see that Spring complains twice with a MethodArgumentNotValidException, once because of your @Min annotation, the other time because of your @NotBlank annotation. Exactly what you wanted!
+
+5. Side-Note: What validation annotations exist?
+
+• You could even specify your own, custom validation annotations to e.g. test for an existing username in your database, but I would advise you to go to Jakarta Bean Validation’s homepage(https://beanvalidation.org/), to read about all existing annotations.
+
+Here’s a quick overview:
+
+@AssertFalse / @AssertTrue → makes sure that a boolean field is set to false / true.
+
+@DecimalMin / @DecimalMax → makes sure that a number (BigDecimal, BigInteger, CharSequence, byte, short, int, long etc.) is >= or ⇐ a value. It’s an equivalent of @Min, @Max you used above.
+
+@Digits
+
+@Email → the string needs to be a well-formed e-mail address
+
+@Future / @FutureOrPresent → a date (pre Java 8 types and Java8+ types) needs to be in the future or present
+
+@Min / @Max → same as DecimalMin / DecimalMax
+
+@Negative / @NegativeOrZero → self-explanatory
+
+@NotBlank / @NotEmpty → a string must not be blank or empty
+
+@Null / @NotNull → self-explanatory
+
+@Past / @PastOrPresent → a date (pre Java 8 types and Java8+ types) needs to be in the future or present
+
+@Pattern → a string needs to match a regex pattern
+
+@Positive / @PositiveOrZero → self-explanatory
+
+@Size → the element size must be between a boundary. valid for strings, collections, maps, arrays.
+
+Together, these annotations cover the most basic validation requirements.
+
+6. Validating @RequestParams
+
+• You could be thinking that you can also apply the JSR 303 annotations to @RequestParam method arguments. Rewrite your createInvoice method so it reads like this:
+
+@PostMapping("/invoices")
+public Invoice createInvoice(@RequestParam("user_id") @NotBlank String userId, @RequestParam @Min(10) @Max(50) Integer amount) {
+    return invoiceService.create(userId, amount);
+}
+
+• Instead of using the @Valid annotation on a @RequestBody object, you can also use the validation annotations directly on the request params. This does not yet work, however.
+
+For it to work, you first need to add an additional bean to your MyFancyPdfInvoicesApplicationConfiguration configuration.
+
+package com.pankaj.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pankaj.myfancypdfinvoices.ApplicationLauncher;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+
+@Configuration
+@ComponentScan(basePackageClasses = ApplicationLauncher.class)
+@PropertySource("classpath:/application.properties")
+@PropertySource(value = "classpath:/application-${spring.profiles.active}.properties"
+                    , ignoreResourceNotFound = true)
+@EnableWebMvc
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+    @Bean // 
+    public MethodValidationPostProcessor methodValidationPostProcessor() {
+        return new MethodValidationPostProcessor();
+    }
+
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+}
+
+• Looking closer, it is just one new @Bean.
+
+@Bean // 
+public MethodValidationPostProcessor methodValidationPostProcessor() {
+    return new MethodValidationPostProcessor();
+}
+
+• You need to add a MethodValidationPostProcessor Bean. This bean is responsible for making the validation annotations (@min, @max etc.) on your controller arguments work.
+
+Finally, you also need to add another annotation to your MyFancyPdfInvoicesController.
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.service.InvoiceService;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.validation.constraints.Max;
+import javax.validation.constraints.Min;
+import javax.validation.constraints.NotBlank;
+import java.util.List;
+
+@RestController
+@Validated
+public class MyFancyPdfInvoicesController {
+
+• Make sure to put the @Validated annotation on the class, otherwise, Spring will ignore the validation annotations (@Min, @Max etc.) on your controller methods.
+
+• Also, note, that this IS NOT the @Valid annotation you put on the @RequestBody object, it is Spring’s own @Validated annotation.
+
+• So, there’s essentially two things you need to look out for: The MethodValidationPostProcessor bean, as well as the @Validated annotation.
+
+Confusing, right?
+
+6. Checkpoint: Validating @RequestParams
+
+• Restart your application and open up your REST Client. Execute the following request against the /invoices endpoint.
+
+• POST http://localhost:8080/invoices?user_id=&amount=1
+Accept: application/json
+
+###
+• You’ll get an HTML error page, returning you a (somewhat ugly) HTTP 500 bad request with a javax.validation.ConstraintViolationException in the server logs, because your user_id is blank and the amount is less than 10.
+
+javax.validation.ConstraintViolationException: createInvoice.arg0: must not be blank, createInvoice.arg1: must be greater than or equal to 10
+	at org.springframework.validation.beanvalidation.MethodValidationInterceptor.invoke(MethodValidationInterceptor.java:116)
+	at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:186)
+	at org.springframework.aop.framework.CglibAopProxy$CglibMethodInvocation.proceed(CglibAopProxy.java:749)
+	at org.springframework.aop.framework.CglibAopProxy$DynamicAdvisedInterceptor.intercept(CglibAopProxy.java:691)
+	at com.pankaj.myfancypdfinvoices.web.MyFancyPdfInvoicesController$$EnhancerBySpringCGLIB$$af07c83e.createInvoice(<generated>)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:564)
+	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:190)
+	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:138)
+	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:105)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:879)
+	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:793)
+	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1040)
+	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:943)
+	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1006)
+	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:909)
+	at javax.servlet.http.HttpServlet.service(HttpServlet.java:660)
+	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:883)
+	at javax.servlet.http.HttpServlet.service(HttpServlet.java:741)
+	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:231)
+	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:166)
+	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:202)
+	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:96)
+	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:541)
+	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:139)
+	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:92)
+	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74)
+	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:343)
+	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:373)
+	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:65)
+	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:868)
+	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1590)
+	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:49)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1130)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:630)
+	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+	at java.base/java.lang.Thread.run(Thread.java:832)
+
+• Perfect, exactly what you wanted, @RequestParam validation is also working.
+
+7. A note on Spring Boot
+
+• When you are using Spring Boot, you don’t have to specify the additional MethodValidationPostProcessor @Bean. You also don’t have to watch out for exactly what dependencies to add to your project to get bean validation working.
+
+• That is because Spring Boot does all this for you. Again, Spring Boot cannot do magic. It simply registers the beans and manages the dependencies for you, under the hood. So you can immediately jump onto the validation annotations.
+
+8. Fin
+
+• Congratulations, you now know how to validate beans and request parameters with Spring MVC. But there was still an issue: The ugly HTTP response codes when working with plain Spring.
+
+Let’s see how you can handle exceptions better, in the next lesson.
+
+
+
+
+

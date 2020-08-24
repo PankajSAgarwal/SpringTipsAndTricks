@@ -1,0 +1,503 @@
+1. Let’s recap again what you are trying to do. In the last lesson, you wrote your very first Spring controller that printed out the string "Hello World", whenever someone called http://localhost:8080.
+
+The end goal, however, is not to print out strings. The end goal is to replace your MyFancyPdfInvoicesServlet and make your controller return Json objects. More specifically, you want to enhance your controller to offer 2 methods:
+
+GET /invoices → returning all invoices in the system.
+
+POST /invoices → creating a new invoice.
+
+Let’s start with the GET call, first.
+
+2. Handling GET Requests with @RestControllers
+
+Go to your MyFirstSpringController, rename it to MyFancyPdfInvoicesController and make it look like so.
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.service.InvoiceService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+public class MyFancyPdfInvoicesController {
+
+    private final InvoiceService invoiceService;
+
+    public MyFancyPdfInvoicesController(InvoiceService invoiceService) {
+        this.invoiceService = invoiceService;
+    }
+
+    @GetMapping("/invoices")
+    // @RequestMapping(value = "/invoices", method = RequestMethod.GET)
+    public List<Invoice> invoices() {
+        return invoiceService.findAll();
+    }
+}
+
+3. Let’s break this down.
+
+@RestController
+public class MyFancyPdfInvoicesController {
+
+• You haven’t seen this annotation before, as you only used @Controller up until now. Interestingly, when you open up the source code for @RestController, you will see that it’s a meta-annotation, bundling multiple, other annotations.
+
+• Most importantly, it consists of the @Controller and @ResponseBody annotation from before, which @RestController is a shorthand for, so using these two annotations instead of @RestController would have the exact same effect.
+
+@Controller
+@ResponseBody
+public class MyFancyPdfInvoicesController {
+
+• To reiterate from the last lesson, @Controller is a marker annotation in Spring that signals Spring that your class contains methods that can return something HTTP related (HTML, JSON, XML) to the end-user or a browser.
+
+• @ResponseBody tells Spring, that you want to write JSON or XML or plain text directly to the HttpServletOutputstream, but without going through an HTML templating framework - which Spring would assume by default if you didn’t annotate your method with @ResponseBody. You will learn more about rendering HTML in the next module, so more on that later on.
+
+• Also, you might be wondering what the difference is in annotating single methods or the whole class with @ResponseBody:
+
+• If you put the annotation on the class, it applies to every public method inside that class.
+
+• If you put the annotation on a method, it applies to only that method.
+
+• private final InvoiceService invoiceService;
+
+public MyFancyPdfInvoicesController(InvoiceService invoiceService) {
+    this.invoiceService = invoiceService;
+}
+You are constructor-injecting the InvoiceService.
+
+• @GetMapping("/invoices")
+// @RequestMapping(value = "/invoices", method = RequestMethod.GET)
+public List<Invoice> invoices() {
+
+• Whenever a GET request comes in for path /invoices (and exactly that), you want Spring’s DispatcherServlet to call this controller method for you.
+
+• @GetMapping("/invoices") is a shorthand annotation for RequestMapping(value = "/invoices", method = RequestMethod.GET), which works exactly the same way, but saves you specifying the HTTP method. You’ll find the @RequestMapping annotation primarily used in older systems.
+
+public List<Invoice> invoices() {
+    return invoiceService.findAll();
+}
+
+• Your Controller method simply returns a list of invoices. There is no more manual JSON conversion going on here anymore compared to your servlet. You return plain Java objects and Spring needs to do the conversion for you!
+
+That’s it. In summary:
+
+• Your controller does not involve any request URI parsing or manual JSON conversions, compared to your servlet.
+
+4. Checkpoint: Handling GET Requests
+
+• Boot up your application. You should see lines like this in the log, which means Spring WebMVC booted up correctly.
+
+INFO: Initializing Spring DispatcherServlet 'dispatcherServlet'
+Jun 30, 2020 12:51:46 PM org.springframework.web.servlet.FrameworkServlet initServletBean
+INFO: Initializing Servlet 'dispatcherServlet'
+Jun 30, 2020 12:51:46 PM org.springframework.web.servlet.FrameworkServlet initServletBean
+
+
+• Go to http://localhost:8080/invoices. What do you get?
+
+Ugh, it looks like an ugly HTTP Status 500.
+
+<!doctype html>
+<html lang="en">
+
+<head>
+	<title>HTTP Status 500 – Internal Server Error</title>
+</head>
+
+<body>
+	<h1>HTTP Status 500 – Internal Server Error</h1>
+	<hr class="line" />
+	<p><b>Type</b> Exception Report</p>
+	<p><b>Message</b> No converter found for return value of type: class java.util.concurrent.CopyOnWriteArrayList</p>
+	<p><b>Description</b> The server encountered an unexpected condition that prevented it from fulfilling the request.
+	</p>
+	<p><b>Exception</b></p>
+	<pre>org.springframework.http.converter.HttpMessageNotWritableException: No converter found for return value of type: class java.util.concurrent.CopyOnWriteArrayList
+	org.springframework.web.servlet.mvc.method.annotation.AbstractMessageConverterMethodProcessor.writeWithMessageConverters(AbstractMessageConverterMethodProcessor.java:230)
+	org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor.handleReturnValue(RequestResponseBodyMethodProcessor.java:181)
+	org.springframework.web.method.support.HandlerMethodReturnValueHandlerComposite.handleReturnValue(HandlerMethodReturnValueHandlerComposite.java:82)
+	org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:123)
+	org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:879)
+	org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:793)
+	org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87)
+	org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1040)
+	org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:943)
+	org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1006)
+	org.springframework.web.servlet.FrameworkServlet.doGet(FrameworkServlet.java:898)
+	javax.servlet.http.HttpServlet.service(HttpServlet.java:634)
+	org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:883)
+	javax.servlet.http.HttpServlet.service(HttpServlet.java:741)
+</pre>
+	<p><b>Note</b> The full stack trace of the root cause is available in the server logs.</p>
+	<hr class="line" />
+	<h3>Apache Tomcat/9.0.36</h3>
+</body>
+
+</html>
+
+• The most important line is this:
+
+<p><b>Message</b> No converter found for return value of type: class java.util.concurrent.CopyOnWriteArrayList</p>
+
+• Remember, your InvoiceService returns such a CopyOnWriteArrayList.
+
+Spring does NOT know what to do with that list. It says: I don’t know of any converters that could do something with that list.
+
+You would love to turn that list into JSON. So, a JSON converter would be something. How do you make Spring use such a JSON converter?
+
+5. Adding @EnableWebMVC
+
+• For that, you need a bit of annotation magic, more specifically one annotation called @EnableWebMVC.
+
+• Open up your SpringConfiguration and add the @EnableWebMVC annotation to it.
+
+package com.pankaj.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pankaj.myfancypdfinvoices.ApplicationLauncher;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+
+@Configuration
+@ComponentScan(basePackageClasses = ApplicationLauncher.class)
+@PropertySource("classpath:/application.properties")
+@PropertySource(value = "classpath:/application-${spring.profiles.active}.properties"
+                    , ignoreResourceNotFound = true)
+@EnableWebMvc
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+}
+
+It really is just one line.
+
+@EnableWebMvc
+public class MyFancyPdfInvoicesApplicationConfiguration {
+
+• This annotation makes sure that Spring Web MVC gets initialized with a sane default configuration.
+
+• That default configuration, among other things, automatically registers a JSON converter with Spring MVC, as long as you have the jackson dependency on your classpath. If that is the case, Spring WebMVC automatically enables JSON <-> Java object conversions for you, without you having to do anything! And Spring will assume that you want JSON returned, by default (instead of XML or plain text).
+
+• And guess what? You added that dependency in the previoius module already.
+
+(Note: Just in case you are wondering why you never had to use that annotation together with Spring Boot: It’s because Spring Boot hides that annotation from you, i.e. it does the same converter registration that the annotation does, in the background.)
+
+6. Checkpoint: @EnableWebMVC
+
+• Now, restart your application and go to http://localhost:8080/invoices. If you are still starting your application in dev profile and inserting dummy invoices, you should actually get two invoices back. Otherwise, you should see an empty array. Definitely no 500 error any more.
+
+[
+    {
+        "id": "764e9a1e-360b-4420-801a-810e65f9bc9a",
+        "amount": 50,
+        "user_id": "someUserId",
+        "pdf_url": "https://some-dev-url.pankaj.com/images/default/sample.pdf"
+    },
+    {
+        "id": "f2d44e67-0176-43d2-b9b9-4cb0d233ef37",
+        "amount": 100,
+        "user_id": "someOtherUserId",
+        "pdf_url": "https://some-dev-url.pankaj.com/images/default/sample.pdf"
+    }
+]
+
+Congratulations! Getting GET to work properly was the hard part. POST will be that much easier.
+
+7. Handling POST Requests
+
+Adding support for creating invoices is quite straightforward: Just add another method with a @PostMapping to your @RestController.
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.service.InvoiceService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+public class MyFancyPdfInvoicesController {
+
+    private final InvoiceService invoiceService;
+
+    public MyFancyPdfInvoicesController(InvoiceService invoiceService) {
+        this.invoiceService = invoiceService;
+    }
+
+    @GetMapping("/invoices")
+    // @RequestMapping(value = "/invoices", method = RequestMethod.GET)
+    public List<Invoice> invoices() {
+        return invoiceService.findAll();
+    }
+
+    @PostMapping("/invoices")
+    public Invoice createInvoice(@RequestParam("user_id") String userId, @RequestParam Integer amount) {
+        return invoiceService.create(userId, amount);
+    }
+}
+
+8.Let’s break it down.
+
+@PostMapping("/invoices")
+
+• Similarly to a @GetMapping, you can specify a @PostMapping annotation. It maps directly to HTTP POST. As long as the HTTP method (get vs post) is different, you can have many request mappings to the same path (e.g. invoices). If the method and path were duplicated, you would get an exception on application start-up.
+
+• public Invoice createInvoice(@RequestParam("user_id") String userId, @RequestParam Integer amount) {
+
+  You are sending in two parameters with your POST, a user_id and an amount. By specifying the @RequestParam annotation, you tell Spring to expect two mandatory parameters with exactly those names (user_id, amount). If the Java parameter name (userId) does not match what the frontend is sending in (user_id), then simply specify the frontend parameter as the @RequestParam value.
+
+Furthermore, Spring will already do basic conversions for you, i.e. try to convert the amount to an Integer and complain if someone sends in a random String instead. This is not bullet-proof validation, but a start.
+
+• return invoiceService.create(userId, amount);
+
+You are again, simply calling your InvoiceService and returning the resulting Java invoice as a result. Spring should then, again, convert it to JSON.
+
+9. Checkpoint: Handling POST Requests
+
+Restart your application and open up your REST Client and create some invoices and list them again.
+
+I won’t get into detail any more of how to do this since you already did it quite a couple of times.
+
+POST http://localhost:8080/invoices?user_id=1&amount=50
+
+{
+    "id": "3b93f2be-1f9a-4cfc-93b3-28f84ba03d83",
+    "amount": 60,
+    "user_id": "franz",
+    "pdf_url": "https://some-dev-url.pankaj.com/images/default/sample.pdf"
+}
+Congratulations! You successfully replaced your MyFancyPDFInvoicesServlet with a Spring @RestController, which does the JSON result conversion for you and has a much nicer way of specifying request URIs, through the @RequestMapping/@GetMapping/@PostMapping annotations.
+
+Let’s take a tiny detour now and have a quick look at @PathVariables.
+
+10. Checkpoint: Delete your servlet
+
+Before you continue, make sure to delete the class MyFancyPDFInvoicesServlet, it is not used anymore and you will not need it any longer.
+
+11. A quick detour: PathVariables
+
+•Instead of using @RequestParams above, you could also have used @PathVariables. They are somewhat self-explanatory.
+
+•Instead of being appended to the request URL with ?key=value, or in the request body, they are part of the URL:
+
+@RequestParam → http://localhost:8080/invoices?user_id=franz&amount=50
+
+@PathVariable → http://localhost:8080/invoices/franz/50
+
+•package com.pankaj.myfancypdfinvoices.web;
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.service.InvoiceService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+public class MyFancyPdfInvoicesController {
+
+    private final InvoiceService invoiceService;
+
+    public MyFancyPdfInvoicesController(InvoiceService invoiceService) {
+        this.invoiceService = invoiceService;
+    }
+
+    @GetMapping("/invoices")
+    // @RequestMapping(value = "/invoices", method = RequestMethod.GET)
+    public List<Invoice> invoices() {
+        return invoiceService.findAll();
+    }
+
+    @PostMapping("/invoices/{userId}/{amount}")
+    public Invoice createInvoice(@PathVariable String userId, @PathVariable Integer amount) {
+        return invoiceService.create(userId, amount);
+    }
+}
+
+12. Let’s break it down.
+
+@PostMapping("/invoices/{userId}/{amount}")
+
+• You are directly specifying the parameters in your @PostMapping annotation, with curly braces.
+
+public Invoice createInvoice(@PathVariable String userId, @PathVariable Integer amount) {
+
+• Instead of @RequestParam, you are now using @PathVariable. The annotation behaves just like @RequestParam, only that the parameter names must match the {placeholders} in the url.
+
+13. Checkpoint: PathVariables
+
+• Restart your application and try to create an invoice by calling the following URL: POST http://localhost:8080/invoices/hans/1.
+
+You should get the following output.
+
+{
+    "id": "4905a0cb-67fa-4f26-b2bb-ec2d4bdfd97a",
+    "amount": 1,
+    "user_id": "hans",
+    "pdf_url": "https://some-dev-url.pankaj.com/images/default/sample.pdf"
+}
+
+14. API Design: @PathVariables vs @RequestParams
+
+It is not in the scope of this course to provide a comprehensive outlook on API design, i.e. should you use primarily @RequestParams or @PathVariables?
+
+However, a good article, which covers RESTFul API design in detail is this: https://www.vinaysahni.com/best-practices-for-a-pragmatic-restful-api.
+
+Bookmark it and read it after finishing this module.
+
+15. Sending in JSON - DTOs
+
+• Up until now, you sent in request parameters with your POST request (?amount=5000&user_id=someId).
+
+• What about sending in that information as JSON itself, as part of the POST request body?
+
+POST http://localhost:8080/invoices
+Content-Type: application/json
+####
+{
+  "amount": 5000,
+  "user_id": "helene"
+}
+
+• To do this, you first need a corresponding Java class, that models this JSON, called DTO (data transfer object) in Java. These classes are solely used to transfer data between the frontend and your backend.
+
+• So, create a new class called InvoiceDto or InvoiceDTO and put it in a new dto subpackage. Again, there have been a great many arguments about lower-casing, upper-casing or camel-casing DTOs. Choose whatever suits you or your company guidelines.
+
+package com.pankaj.myfancypdfinvoices.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public class InvoiceDto {
+
+    @JsonProperty("user_id")
+    private String userId;
+
+    private Integer amount;
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    public Integer getAmount() {
+        return amount;
+    }
+
+    public void setAmount(Integer amount) {
+        this.amount = amount;
+    }
+}
+
+• This should look familiar. It is a class reflecting the properties of the JSON you are sending in. As the user_id json property does not exist in Java, you need to configure Jackson accordingly with the @JsonProperty annotation.
+
+• Also, do not forget the getters and setters for Jackson to work properly. Jackson also works with direct field access, but it would need some more annotations for that. Hence, you’ll go with getters and setters, for now.
+
+16. @RequestBody Controllers
+
+Now, let’s change the createInvoice method of your @RestController.
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.service.InvoiceService;
+import com.pankaj.myfancypdfinvoices.dto.InvoiceDto;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+public class MyFancyPdfInvoicesController {
+
+    private final InvoiceService invoiceService;
+
+    public MyFancyPdfInvoicesController(InvoiceService invoiceService) {
+        this.invoiceService = invoiceService;
+    }
+
+    @GetMapping("/invoices")
+    // @RequestMapping(value = "/invoices", method = RequestMethod.GET)
+    public List<Invoice> invoices() {
+        return invoiceService.findAll();
+    }
+
+    @PostMapping("/invoices")
+    public Invoice createInvoice(@RequestBody InvoiceDto invoiceDto) {
+        return invoiceService.create(invoiceDto.getUserId(), invoiceDto.getAmount());
+    }
+}
+
+17 . Let’s break it down.
+
+@PostMapping("/invoices")
+
+• In case you are still having the PathVariable {} parameters in here from the last lesson, make sure to remove them.
+
+public Invoice createInvoice(@RequestBody InvoiceDto invoiceDto) {
+
+• As a method parameter, you are now using your new InvoiceDto. Spring will be smart enough to automatically convert the JSON you are sending into that Java class, because you are using the @RequestBody annotation. It will also complain if you are sending in fields that have the wrong expected types (i.e. a string for the amount).
+
+18. Checkpoint: @RequestBody
+
+• As always, restart your application and open up your REST client to see if your new /invoices endpoint works.
+
+• Make sure to set the Content-Type header of the request to application/json, because Spring needs that header to understand what type of content you are sending in and trigger the appropriate conversion!
+
+POST http://localhost:8080/invoices
+Accept: application/json
+Content-Type: application/json
+
+{   "amount": 5000,   "user_id": "someId" }
+
+###
+Which will work and return you a brand-new invoice JSON result!
+
+{
+    "id": "8568352b-c14e-447c-b43d-de99d5b9e768",
+    "amount": 5000,
+    "user_id": "someId",
+    "pdf_url": "https://some-dev-url.marcobehler.com/images/default/sample.pdf"
+}
+
+• Perfect. Let’s continue with that tiny side-note from above, the content-type header. There’s more to it and headers in general, at second glance.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

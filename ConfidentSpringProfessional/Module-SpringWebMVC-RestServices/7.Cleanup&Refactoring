@@ -1,0 +1,16 @@
+Periodically it’s a good idea to have a look back at your project and see if there are tiny refactorings or cleanups you can do. You have been adding quite a few classes up until now, which are named rather well, for the most part.
+
+There are two exceptions:
+
+MyFancyPdfInvoicesApplicationConfiguration
+
+MyFancyPdfInvoicesController
+
+As you are working inside the MyFancyPdfInvoices project, there is really no need to prefix these classes with MyFancyPdfInvoices anymore. Make sure to rename them without that prefix, so you’ll end up with:
+
+ApplicationConfiguration
+
+InvoicesController
+
+Also, feel free to rename GlobalControllerExceptionHandler to GlobalExceptionHandler, as Controller inside the name feels a bit redundant.
+

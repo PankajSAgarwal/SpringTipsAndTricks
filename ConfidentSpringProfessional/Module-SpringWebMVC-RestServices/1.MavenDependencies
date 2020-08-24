@@ -1,0 +1,11 @@
+1. Spring WebMvc is a part of spring framework and not spring boot.
+
+2. To add Spring Web MVC to a plain Spring project, you need just one additional Maven dependency: spring-webmvc.
+
+Open your project’s pom.xml file in the language of your choice and add this dependency for the latest Spring WebMVC version.
+
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-webmvc</artifactId>
+    <version>5.2.7.RELEASE</version>
+</dependency>
