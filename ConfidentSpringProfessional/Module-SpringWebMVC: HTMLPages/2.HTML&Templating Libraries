@@ -1,0 +1,112 @@
+1. The MyFancyPdfInvoicesServlet you built in the first module returned a static HTML page whenever you visited http://localhost:8080.
+
+• Let’s try and rebuild that simple page.
+
+• As with converting between Java and XML or JSON, Spring cannot write HTML pages itself. It relies heavily on third-party libraries, more specifically HTML templating libraries, to do the heavy lifting.
+
+• When it comes to HTML, you can choose from a variety of HTML templating libraries that work well with Spring:
+
+  - Thymeleaf
+
+  - Velocity
+
+  - Freemarker
+
+A fair amount of others, see a complete list here(https://docs.spring.io/spring/docs/current/spring-framework-reference/web.html#mvc-view).
+
+•The Spring documentation itself uses Thymeleaf extensively for all their own tutorials and pushes it as the de-facto standard - hence you’re going to use it here as well. Though, depending on the company, you will also find Velocity & Freemarker still heavily used.
+
+• Before you get into downloading the appropriate Thymeleaf dependencies, let’s start the other way around and build your controller first.
+
+2. HTML @RestController - A First Try
+
+Open up your InvoicesController class and add the following, new method to render a static homepage.
+
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import com.pankaj.myfancypdfinvoices.service.InvoiceService;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.validation.constraints.Max;
+import javax.validation.constraints.Min;
+import javax.validation.constraints.NotBlank;
+import java.util.List;
+
+
+@RestController
+@Validated
+public class InvoicesController {
+
+    private final InvoiceService invoiceService;
+
+    public InvoicesController(InvoiceService invoiceService) {
+        this.invoiceService = invoiceService;
+    }
+
+    @GetMapping("/")
+    public String homepage() {
+        return "index.html";
+    }
+
+3. Let’s break this down.
+
+• @GetMapping("/")
+public String homepage() {
+
+The homepage method (any method name works) itself is rather simple. It is mapped to GET /, requests and does nothing but return a String.
+
+• return "index.html";
+
+The String result, here with a value of index.html refers to an HTML template inside of your project (think: classpath, or src/main/resources) with a filename of index.html, not to the plain string "index.html"!
+
+So, Spring should try and look for a template with that name, render it and return its HTML to the browser.
+
+Let’s give that a try. Restart your application and go to http://localhost:8080. What do you see?
+
+index.html
+
+• Ouch! In fact, Spring didn’t look for an HTML template called "index.html", it simply returned the string to the user as plain/text. Why is that?
+
+4. The problem with @RestControllers
+
+• Keep in mind that whenever you apply the @RestController annotation to your class, every public method’s result will (more or less) directly be written to the HTTP response body, without going through an HTML templating library.
+
+• If you want to return HTML from your methods, you will now need to write a new controller! And you also mustn’t use the @RestController annotation anymore.
+
+• So, create the following class and make sure to remove the homepage method from your existing @RestController class, as well!
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@Controller
+public class WebsiteController {
+
+    @GetMapping("/")
+    public String homepage() {
+        return "index.html";
+    }
+}
+
+Note that the new class is just a Controller not a @RestController anymore, as you want to serve HTML instead of JSON or XML.
+
+5. Checkpoint: Controller
+
+This looks better, so restart your application and go to http://localhost:8080. 
+
+What do you see?
+
+
+A 404 error. Why?
+
+Because you HTML template does not (yet) exist.
+
+Now it’s time to add Thymeleaf to your project and create that .html template.
+

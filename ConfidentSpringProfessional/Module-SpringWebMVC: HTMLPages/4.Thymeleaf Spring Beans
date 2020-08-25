@@ -1,0 +1,115 @@
+1. For Spring MVC and Thymeleaf to work together, you need to register a couple of beans.
+
+More specifically:
+
+- You need to tell Spring that it should try to find Thymeleaf templates. You do that by declaring a ThymeleafViewResolver.
+
+- You need to configure the ThymeleafViewResolver to use a SpringTemplateEngine, which hooks up Spring MVC and Thymeleaf, but more on that in a second.
+
+Open up your ApplicationConfiguration class and add the following new bean methods.
+
+package com.marcobehler.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marcobehler.myfancypdfinvoices.ApplicationLauncher;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.thymeleaf.spring5.SpringTemplateEngine;
+import org.thymeleaf.spring5.templateresolver.SpringResourceTemplateResolver;
+import org.thymeleaf.spring5.view.ThymeleafViewResolver;
+
+@Configuration
+@ComponentScan(basePackageClasses = ApplicationLauncher.class)
+@PropertySource("classpath:/application.properties")
+@PropertySource(value = "classpath:/application-${spring.profiles.active}.properties"
+                    , ignoreResourceNotFound = true)
+@EnableWebMvc
+public class ApplicationConfiguration {
+
+    @Bean // 
+    public MethodValidationPostProcessor methodValidationPostProcessor() {
+        return new MethodValidationPostProcessor();
+    }
+
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+
+    @Bean
+    public ThymeleafViewResolver viewResolver() {
+      ThymeleafViewResolver viewResolver = new ThymeleafViewResolver();
+      viewResolver.setTemplateEngine(templateEngine);
+      viewResolver.setOrder(1);//Optional
+      viewResolver.setViewNames(new String[]{"*.html","*.xhtml"});//Optional
+      return viewResolver;
+    }
+
+    @Bean
+    public SpringTemplateEngine templateEngine() {
+        SpringTemplateEngine templateEngine = new SpringTemplateEngine();
+        templateEngine.setTemplateResolver(templateResolver());
+        return templateEngine;
+    }
+
+    @Bean
+    public SpringResourceTemplateResolver templateResolver() {
+        SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
+        templateResolver.setPrefix("classpath:/templates/");
+        templateResolver.setCacheable(false);
+        return templateResolver;
+    }
+}
+
+2. Let’s break this down:
+
+//1
+@Bean
+public ThymeleafViewResolver viewResolver() {
+    ThymeleafViewResolver viewResolver = new ThymeleafViewResolver();
+    viewResolver.setTemplateEngine(templateEngine());
+
+    viewResolver.setOrder(1); // optional
+    viewResolver.setViewNames(new String[] {"*.html", "*.xhtml"}); // optional
+    return viewResolver;
+}
+
+- Whenever you return a String from a @Controller like "return index.html", Spring will ask all the ViewResolvers it knows to find and render that index.html view/template. Hence, you need to declare a ThymeleafViewResolver, so Spring knows about it.
+
+- As you, theoretically, could have many templating libraries, e.g. Thymeleaf and Freemarker, in your project, you can also order the ViewResolvers, which is however not needed for this course. If that was the case (multiple libraries), you would also set the viewNames of the templates. i.e. make Thymeleaf only render templates that end with .html, Freemarker with .ftl, Velocity with .vm, etc.
+
+//2
+@Bean
+public SpringTemplateEngine templateEngine() {
+    SpringTemplateEngine templateEngine = new SpringTemplateEngine();
+    templateEngine.setTemplateResolver(templateResolver());
+    return templateEngine;
+}
+
+The ViewResolver needs a SpringTemplateEngine to work with, a Thymeleaf-specific configuration bean, which you would find out about in Thymeleaf’s documentation. It lets you configure a couple of more advanced Thymeleaf settings, but it also needs a reference to a templateResolver, the class that actually finds your Thymeleaf template.
+
+//3 
+@Bean
+public SpringResourceTemplateResolver templateResolver() {
+    SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
+    templateResolver.setPrefix("classpath:/templates/");
+    templateResolver.setCacheable(false);
+    return templateResolver;
+}
+
+There are several ways to tell the SpringResourceTemplateResolver where to find its templates. One of them is to just prefix every template name with a Spring resources classifier.
+
+Here you are saying that all your templates should be in the /templates/ folder on your classpath (i.e. src/main/resources/ during development, later on in the .jar file) and that they should not be cached, which makes sense during development, but not in production.
+
+3. Note on Spring Boot
+
+As you might have guessed, and at this point, it sounds a bit like a broken record, when using Spring Boot you do not have to create these beans manually, but Spring Boot will automatically create them for you. You will learn more about how this works in the Spring Boot module.
+
+
+
+

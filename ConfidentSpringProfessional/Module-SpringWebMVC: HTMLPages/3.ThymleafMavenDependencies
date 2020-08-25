@@ -1,0 +1,11 @@
+1. There are a couple of different Thymeleaf versions for each Spring version.
+
+2. If you are using Spring 5, like you are in this course, it is enough to add the following library to your pom.xml file.
+
+<dependency>
+    <groupId>org.thymeleaf</groupId>
+    <artifactId>thymeleaf-spring5</artifactId> <!-- 1 -->
+    <version>3.0.11.RELEASE</version>
+</dependency>
+
+3. Alternatives would be thymeleaf-spring4 or thymeleaf-spring3, for Spring 4 and 3, respectively.

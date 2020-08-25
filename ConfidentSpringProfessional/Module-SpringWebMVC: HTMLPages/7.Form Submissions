@@ -1,0 +1,363 @@
+1. Most websites, that are not purely static, sooner or later contain a form. Be it a simple contact form, a login form or a registration form.
+
+Let’s create a very simple login form. For that you need to do two things:
+
+Create a login.html html template.
+
+Create a corresponding login method, or rather two, in your controller.
+
+2. Login Template
+
+Right next to your index.html file, so under /src/main/resources/templates create a new file called login.html.
+
+It should look like this:
+
+<!DOCTYPE HTML>
+<html xmlns:th="https://www.thymeleaf.org">
+<head>
+    <title>Login</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+</head>
+<body>
+<form th:action="@{/login}" th:object="${loginForm}" method="post">
+
+    <p>Username: <input type="text" th:field="*{username}"/></p>
+    <p>Password: <input type="password" th:field="*{password}"/></p>
+    <p><input type="submit" value="Submit"/></p>
+</form>
+</body>
+</html>
+
+3. Let’s break this down.
+
+<form th:action="@{/login}" th:object="${loginForm}" method="post">
+
+You are specifing two attributes on the form:
+
+a) The action of the form, i.e. which url this form is submitted against. This must, of course, match the corresponding @Controller method.
+
+b) The object of the form. As you can remember from the very first module, dealing with request parameters is a bit fiddly. Thymeleaf can make things more convenient, in that it maps these form fields directly onto a Java object, also called a backing bean.
+
+<p>Username: <input type="text" th:field="*{username}"/></p>
+<p>Password: <input type="password" th:field="*{password}"/></p>
+
+Your form consists of two input fields, username and password, mapping directly to properties of your loginForm object. Note the special syntax *{}. If you are referencing a field that does not exist, you will get an exception.
+
+That’s it for the HTML template.
+
+4. Backing Form Bean
+
+It’s time to write that backing bean, the LoginForm.
+
+Now let’s add the corresponding Java classes, which you can put under a new web.forms package.
+
+Now let’s add the corresponding Java classes, which you can put under a new web.forms package.
+
+package com.pankaj.myfancypdfinvoices.web.forms;
+
+public class LoginForm {
+
+    private String username, password;
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+}
+
+Not much needs to be said about this simple value object. Now, let’s hook up the index page with that form.
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import com.pankaj.myfancypdfinvoices.web.forms.LoginForm;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.Date;
+
+@Controller
+public class WebsiteController {
+
+    @GetMapping("/")
+    public String homepage(Model model, @RequestParam(required = false, defaultValue = "stranger") String username) {
+        model.addAttribute("username", username);
+        model.addAttribute("currentDate", new Date());
+        return "index.html";
+    }
+
+    @GetMapping("/login")
+    public String login(Model model){
+        model.addAttribute("loginForm", new LoginForm());
+        return "login.html";
+    }
+}
+
+• Note the new login method.
+
+@GetMapping("/login")
+public String login(Model model){
+
+• The method is mapped to GET /login requests and also specifies a model.
+
+model.addAttribute("loginForm", new LoginForm());
+
+• To that model, you now have to add a new LoginForm. If you wanted to prefill your username field, for example, you could put a value into the backing bean and it would automatically be displayed, when you open the HTML page.
+
+5. Checkpoint: LoginPage
+
+• Restart your application, go to http://localhost:8080/login and make sure that you see your login form, with two input fields and a submit button.
+
+• Try hitting the submit button.
+
+• It will result in a HTTP Status 405 - Method Not Allowed. Why?
+
+• Because the form is trying to POST to "/login", and the handler you wrote only works for GET requests.
+
+• Hence, let’s build the method for handling the POST request.
+
+6. 
+
+package com.pankaj.myfancypdfinvoices.web;
+import com.pankaj.myfancypdfinvoices.web.forms.LoginForm;
+import org.apache.juli.logging.Log;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.Date;
+
+@Controller
+public class WebsiteController {
+
+    @GetMapping("/")
+    public String homepage(Model model, @RequestParam(required = false, defaultValue = "stranger") String username) {
+        model.addAttribute("username", username);
+        model.addAttribute("currentDate", new Date());
+        return "index.html";
+    }
+
+    @GetMapping("/login")
+    public String login(Model model){
+        model.addAttribute("loginForm", new LoginForm());
+        return "login.html";
+    }
+
+    @PostMapping("/login")
+    public String login(@ModelAttribute LoginForm loginForm, Model model){
+        if (loginForm.getUsername().equals(loginForm.getPassword())) {
+            return "redirect:/";
+        }
+        model.addAttribute("invalidCredentials", "true");
+        return "login.html";
+    }
+}
+
+
+• There’s a new login() method at the bottom. Let’s break it down.
+
+• @PostMapping("/login")
+  public String login(@ModelAttribute LoginForm loginForm, Model model){
+
+•The method is mapped to POST /login calls. It also receives a LoginForm parameter, which is marked as @ModelAttribute. What does this mean?
+
+•First of all, Spring is smart enough to convert the input fields of your form directly into a LoginForm object, by matching the names of the HTML input fields with the Java object fields. The @ModelAttribute annotation, additionaly, makes sure that you can access the loginForm in the model, without having to manually add it.
+
+•So, it is pretty much equivalent to the line model.put("loginForm", loginForm).
+
+•if (loginForm.getUsername().equals(loginForm.getPassword())) {
+    return "redirect:/";
+}
+
+•You’re faking a login here, by assuming that every combination where username == password is correct. In a real application, this would be a database call, but for this course, it’s enough to put in this simple check.
+
+•In case the login is successful, you are redirecting to /, i.e. the homepage. The string you are returning from the method now does not refer to a template (view), instead, Spring will issue a HTTP 302 redirect to the path you are returning.
+
+        model.addAttribute("invalidCredentials", "true");
+        return "login.html";
+    }
+}
+
+• In case of invalid credentials, you want to re-render the login page, with a simple boolean flag set to true. You are going to use that flag to show some additional HTML boxes.
+
+<!DOCTYPE HTML>
+<html xmlns:th="https://www.thymeleaf.org">
+<head>
+    <title>Login</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+</head>
+<body>
+<div th:if="${invalidCredentials}" style="background-color: red;">
+    Sorry, <span th:text="${loginForm.username}">[username]</span>, that doesn't look like you!
+</div>
+
+<form th:action="@{/login}" th:object="${loginForm}" method="post">
+
+    <p>Username: <input type="text" th:field="*{username}"/></p>
+    <p>Password: <input type="password" th:field="*{password}"/></p>
+    <p><input type="submit" value="Submit"/></p>
+</form>
+</body>
+</html>
+There’s now a new box that pops-up, whenver invalid credentials are entered.
+
+<div th:if="${invalidCredentials}" style="background-color: red;">
+    Sorry, <span th:text="${loginForm.username}">[username]</span>, that doesn't look like you!
+</div>
+
+7. Checkpoint: Form Submissions & ModelAttribute
+
+• Restart your application, go to http://localhost:8080/login and put in any username and password.
+
+• If both match, you should be redirected to the homepage.
+
+• If they don’t match, you should see the red box with an error message.
+
+• Congratulations, you now know how to do form submissions with Thymeleaf!
+
+8. Validation
+
+There’s one thing missing. At the moment you can enter any username and password. This means also a blank combination would lead to a successful login. And in the real world, you’d probably also have size restrictions etc. In short: You need to add some validation to your form.
+
+Let’s add the appropriate annotations to the LoginForm bean.
+
+
+package com.pankaj.myfancypdfinvoices.web.forms;
+
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
+
+public class LoginForm {
+
+    @NotBlank
+    @Size(min = 5,  max = 7)
+    private String username, password;
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+}
+
+These are very tight size constraints [length= 5, 6 or 7], for easier demonstration purposes.
+
+Now, you also need to enhance your controller a little bit.
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import com.pankaj.myfancypdfinvoices.web.forms.LoginForm;
+import org.apache.juli.logging.Log;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import javax.validation.Valid;
+import java.util.Date;
+
+@Controller
+public class WebsiteController {
+
+    @GetMapping("/")
+    public String homepage(Model model, @RequestParam(required = false, defaultValue = "stranger") String username) {
+        model.addAttribute("username", username);
+        model.addAttribute("currentDate", new Date());
+        return "index.html";
+    }
+
+    @GetMapping("/login")
+    public String login(Model model){
+        model.addAttribute("loginForm", new LoginForm());
+        return "login.html";
+    }
+
+    @PostMapping("/login")
+    public String login(@ModelAttribute @Valid LoginForm loginForm,BindingResult bindingResult,  Model model ){
+        if (bindingResult.hasErrors()) {
+            return "login.html";
+        }
+        if (loginForm.getUsername().equals(loginForm.getPassword())) {
+            return "redirect:/";
+        }
+        model.addAttribute("invalidCredentials", "true");
+        return "login.html";
+    }
+}
+
+Let’s break this down.
+
+@PostMapping("/login")
+public String login(@ModelAttribute @Valid LoginForm loginForm,BindingResult bindingResult,  Model model ){
+Your LoginForm now also is marked as @Valid, which will trigger Spring’s validation. The problem is, as you might remember from the validating Rest services chapter, that this will lead to an exception being thrown, and therefore caught by your GlobalExceptionHandler.
+
+You don’t want that. Instead, you’d like to re-render the login form, displaying appropriate errors. If you want to do that you must add a BindingResult parameter directly after your LoginForm. It won’t work if you put the BindingResult in third-place, for example (yes, really).
+
+A BindingResult is basically a container for all your validation errors.
+
+if (bindingResult.hasErrors()) {
+    return "login.html";
+}
+Hence, in your login method you would ask the bindingResult if it has any errors. If it does, you short-circuit and immediately display the login page again.
+
+But how can you print out the errors in the login template? For that, you’ll need to change it a bit, again.
+
+<p>Username: <input type="text" th:field="*{username}"/></p>
+<p style="background-color:red" th:if="${#fields.hasErrors('username')}" th:errors="*{username}"></p>
+
+<p>Password: <input type="password" th:field="*{password}"/></p>
+<p style="background-color:red" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></p>
+You can access the binding result through special Thymeleaf syntax, with #fields.hasErrors(yourFieldName). If the field has errors, you again are using special Thymeleaf syntax to display the error message that is bound to a field of your backing bean.
+
+Note Displaying errors with Thymeleaf is, again, a huge topic. If you want to get comprehensive information on displaying all sorts of errors from Spring in Thymeleaf, have a look at the appropriate section in the documentation.(https://www.thymeleaf.org/doc/tutorials/3.0/thymeleafspring.html)
+
+9. Checkpoint: HTML Validation
+
+• Restart your application, go to http://localhost:8080/login and submit an empty login form.
+
+You should see error messages, below your form field.
+
+size must be between 5 and 20
+must not be blank
+Congratulations, exactly what you wanted!
+
+ 
+
+
+
+
+
+
+
+
+
+
+

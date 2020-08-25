@@ -1,0 +1,13 @@
+1. So far, you have been using Spring Web MVC to build REST Services that serve XML or JSON, e.g. your invoices endpoints.
+
+However, at some point, MyFancyPDFInvoices needs to display good old HTML pages as well, be it the homepage or a simple login/logout page.
+
+Spring Web MVC comes with a ton of functionality to render HTML pages, hence this is what you are going to learn in this module:
+
+How to render HTML with Spring WebMVC.
+
+How to work with a templating library called Thymeleaf.
+
+How to work with form submissions.
+
+

@@ -1,0 +1,41 @@
+1. It is time to create the actual index.html template.
+
+2. Create a new directory called templates in the /src/main/_resources folder, and in it an index.html file. Remember, this is the path you configured your templateResolver in your ApplicationConfiguration to use, in the last lesson.
+
+## Unix/Linux/MacOS
+cd /src/main
+mkdir -p resources/templates
+cd resources/templates
+touch index.html
+
+3. Give the HTML file the following contents:
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>First Thymeleaf Template</title>
+</head>
+<body>
+<h1>This is it!</h1>
+
+<p>Your very first Thymleaf template.</p>
+</body>
+</html>
+
+
+• The template, for now, does not contain any variables or any other dynamic data. It is just a static HTML page. Enough, to see if things are set-up correctly.
+
+4. Checkpoint: Adding Thymeleaf
+
+Restart your application and go to http://localhost:8080. You should see this:
+
+*This is it!*
+
+Your very first Thymleaf template.
+Congratulations!
+
+Let’s now build a slightly more sophisticated page.
+
+
+

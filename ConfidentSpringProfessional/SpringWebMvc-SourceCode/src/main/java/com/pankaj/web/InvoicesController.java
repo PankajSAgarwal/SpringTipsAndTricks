@@ -22,6 +22,8 @@ public class InvoicesController {
         this.invoiceService = invoiceService;
     }
 
+
+
     @GetMapping("/invoices")
     //@RequestMapping(value = "/invoices",method = RequestMethod.GET)
     //@ResponseBody // not needed since @RestController is @Controller + @ResponseBody
@@ -35,4 +37,6 @@ public class InvoicesController {
 
         return invoiceService.create(userId,amount);
     }
+
+
 }

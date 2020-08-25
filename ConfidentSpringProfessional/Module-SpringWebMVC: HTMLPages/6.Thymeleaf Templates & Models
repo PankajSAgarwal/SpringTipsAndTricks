@@ -1,0 +1,124 @@
+1. Templates only make sense, once you have dynamic data: Imagine you want to display the currently logged in username and the current date on the index page.
+
+To do that, you need to make two change:
+
+Add variables to your template, e.g. the ${username} and the ${currentDate}.
+
+Tell Spring to provide these variables to the template, which you do through a Model.
+
+Let’s start with enriching the template with variables.
+
+2. Creating more demanding Thymeleaf templates
+
+Every templating library comes with its own way of how to specify variable values in its templates.
+
+Thymeleaf is built on the notion, that your template is a valid HTML file that even a designer can open up. The templates become dynamic through additional HTML attributes.
+
+Let’s see what this could look like for your current template (ignore the weird formatting, it is for better readability).
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<p>Hello
+<span th:text="${username}" th:remove="tag">[Username]</span>,
+this is the current date
+<span th:text="${#dates.format(currentDate, 'dd-MM-yyyy HH:mm')}">[currentDate]</span>
+</p>
+<div th:if="${username.startsWith('z')}">Your name starts with a lower-case z, unusual!</div>
+</body>
+</html>
+
+3. Let’s break this down.
+
+<span th:text="${username}" th:remove="tag">[Username]</span>,
+
+• As mentioned before, Thymeleaf templates are valid HTML files, which have custom "th:" attributes, that do something. th:text, for example, replaces the tag’s contents with whatever you specify. ${} is a variable reference, that needs to be available in your page’s model (more on that in a second).
+
+• Finally, the th:remove=tag will make sure, that the <span> itself won’t be found in the final output of the HTML page.
+
+<span th:text="${#dates.format(currentDate, 'dd-MM-yyyy HH:mm')}">[currentDate]</span>
+
+•Thymeleaf also offers helper functions, like for dates. Note, that currentDate, (like ${username}), is the variable name that needs to be available in the page’s model, and #dates is a reference to Thymeleaf-specific template helper function.
+
+<div th:if="${username.startsWith('z')}">Your name starts with a lower-case z, unusual!</div>
+
+•You can also have if clauses and call normal Java functions on, e.g. your ${username}.
+
+4. Note:
+
+It is impossible to go into detail of how the complete Thymeleaf syntax works in the scope of this course. If you want a thorough explanation of the complete syntax and every helper function, I highly advise you to consult the official documentation.
+
+https://www.thymeleaf.org/doc/tutorials/3.0/usingthymeleaf.html#standard-expression-syntax
+
+5. Filling the model
+
+As mentioned at the beginning, you need to make the username and currentDate variables available to the template.
+
+You can do that by changing your Controller.
+
+In doing so, we’ll also make things more dynamic in that your homepage accepts an optional username GET parameter.
+
+package com.pankaj.myfancypdfinvoices.web;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.Date;
+
+@Controller
+public class WebsiteController {
+
+    @GetMapping("/")
+    public String homepage(Model model, @RequestParam(required = false, defaultValue = "stranger") String username) {
+        model.addAttribute("username", username);
+        model.addAttribute("currentDate", new Date());
+        return "index.html";
+    }
+}
+
+6. Let’s break this down.
+
+@GetMapping("/")
+public String homepage(Model model, @RequestParam(required = false, defaultValue = "stranger") String username) {
+
+• The homepage method now takes an optional @RequestParam, called username. Even better, if the user does not supply a username, or an empty/blank one, it will have a default value of "stranger".
+
+•The Model parameter is essentially a map, containing all the variables that you want to be able to access in your (Thymeleaf) templates. Spring is smart enough to automatically inject a Model into every @Controller method, if you specify it as a parameter.
+
+model.addAttribute("username", username);
+model.addAttribute("currentDate", new Date());
+
+• You are adding the username parameter, that your user supplies as request param, to your model. In a real-life project, this would likely come from the database or a framework like Spring Security, after the user has logged in.
+
+• You are also adding the current Date to the model. Unfortunately, plain Thymeleaf does not work with Java 8+ (LocalDate etc.) dates. You would need to add another library called thymeleaf-extras-java8time to your project for that, which will not be demonstrated here.
+
+Hence, you’ll add a good, old pre-Java 8 Date to the page’s model.
+
+7. Checkpoint: Models
+
+• Let’s see what happens. Restart your application, open up your browser and go to http://localhost:8080. Play with the usernames, like below
+
+You should see something similar to this:
+
+GET http://localhost:8080/?username=pankaj
+
+Hello pankaj, this is the current date 02-07-2020 15:10
+GET http://localhost:8080/?username=
+
+Hello stranger, this is the current date 02-07-2020 15:12
+GET http://localhost:8080/?username=zarco
+
+Hello zarco, this is the current date 02-07-2020 15:12
+
+Your name starts with a lower-case z, unusual!
+
+Perfect, the connection between your @Controller, the Model and the template is working correctly!
+
+
+
