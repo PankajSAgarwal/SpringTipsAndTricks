@@ -1,0 +1,9 @@
+1. So far, you have been using the spring-jdbc library. It is one of the oldest available core Spring framework modules. It is very light-weight, but as you could see it is just a tiny wrapper around Java’s plain JDBC.
+
+2. Mapping between ResultSets and Java objects is a fair amount of plumbing work. Additionally, you might have heard about ORM projects like Hibernate, which offer a bit more convenience when it comes to these object-relational mappings.
+
+3. How does Spring Data fit into this picture?
+
+4. A while ago, the Spring developers created an umbrella project, called Spring Data. It consists of several sub-projects, like Spring Data JDBC or Spring Data JPA or Spring Data LDAP. In short, they all provide extra convenience on top of either JDBC, or JPA/Hibernate, or LDAP.
+
+5. You will learn about Spring Data JDBC in one of the next modules, but for now keep in mind that you can always fall back to using JdbcTemplate in any Spring or Spring Boot project, to get low-level, but simple database access.

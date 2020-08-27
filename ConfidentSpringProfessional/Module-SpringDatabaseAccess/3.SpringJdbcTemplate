@@ -1,0 +1,256 @@
+1. Adding a DataSource to your project is just the beginning. Eventually, you’ll want to write some SQL queries and execute them against your database.
+
+2. In Spring, the low-level way to do that is to use a JDBCTemplate in combination with your DataSource. It is a tiny wrapper class around Java’s plain JDBC facilities and allows you to conveniently execute SQL statements.
+
+3. The goal for this lesson is to refactor your InvoiceService from the previous modules, to not use an in-memory list anymore, but rather to access your new invoices database table.
+
+4. This means you need to:
+
+Create and configure a JDBC Template.
+
+Make the InvoiceService use that JDBCTemplate.
+
+5. Creating a JDBCTemplate
+
+Creating a JDBCTemplate is simple. Just add another @Bean to your ApplicationConfiguration class.
+
+@Bean
+public JdbcTemplate jdbcTemplate() {
+    return new JdbcTemplate(dataSource());
+}
+
+• A JDBCTemplate needs a reference to the DataSource. It is a thread-safe class, and can thus be used by many multiple different threads at the same time to execute SQL against your database.
+
+6. JdbcTemplate selects & RowMappers
+
+• Then, inject your JdbcTemplate into your InvoiceService and start refactoring the findAll Method.
+
+package com.pankaj.myfancypdfinvoices.service;
+
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import java.util.List;
+
+@Component
+public class InvoiceService {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    private final UserService userService;
+
+    private final String cdnUrl;
+
+    public InvoiceService(UserService userService, JdbcTemplate jdbcTemplate, @Value("${cdn.url}") String cdnUrl) {
+        this.userService = userService;
+        this.cdnUrl = cdnUrl;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @PostConstruct
+    public void init() {
+        System.out.println("Fetching PDF Template from S3...");
+        // TODO download from s3 and save locally
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        System.out.println("Deleting downloaded templates...");
+        // TODO actual deletion of PDFs
+    }
+
+    public List<Invoice> findAll() {
+        return jdbcTemplate.query("select id, user_id, pdf_url, amount from invoices", (resultSet, rowNum) -> {
+            Invoice invoice = new Invoice();
+            invoice.setId(resultSet.getObject("id").toString());
+            invoice.setPdfUrl(resultSet.getString("pdf_url"));
+            invoice.setUserId(resultSet.getString("user_id"));
+            invoice.setAmount(resultSet.getInt("amount"));
+            return invoice;
+        });
+    }
+
+    public Invoice create(String userId, Integer amount) {
+        throw new IllegalStateException("not yet implemented");
+    }
+}
+
+• Let’s break this down.
+
+public InvoiceService(UserService userService, JdbcTemplate jdbcTemplate, @Value("${cdn.url}") String cdnUrl) {
+    this.userService = userService;
+    this.cdnUrl = cdnUrl;
+    this.jdbcTemplate = jdbcTemplate;
+}
+
+• You are injecting the JdbcTemplate with constructor injection into the InvoiceService.
+
+public List<Invoice> findAll() {
+    return jdbcTemplate.query("select id, user_id, pdf_url, amount from invoices", (resultSet, rowNum) -> {
+        Invoice invoice = new Invoice();
+        invoice.setId(resultSet.getObject("id").toString());
+        invoice.setPdfUrl(resultSet.getString("pdf_url"));
+        invoice.setUserId(resultSet.getString("user_id"));
+        invoice.setAmount(resultSet.getInt("amount"));
+        return invoice;
+    });
+}
+
+• You’ll need to adjust the findAll method to not return the invoices in-memory list anymore (while you are at it, delete that field!). Rather, you are going to query the database. One way of doing that is with jdbcTemplate's query method, which lets you specify the SQL query as the first parameter, and a row mapper. The row mapper lets you map every returned SQL row into a Java object, i.e. your invoice objects. It is a bit of manual fumbling but works rather well.
+
+• Note: The id column in your database table is not an integer, it is a UUID string column. Hence, you need to call getObject("id").toString(), as the UUID column will result in a Java UUID object. An auto-increment column for the id column would have worked just as well or even better, but it wouldn’t have had the same learning effect :)
+
+public Invoice create(String userId, Integer amount) {
+    throw new IllegalStateException("not yet implemented");
+}
+
+• Make sure to replace the create() method with an IllegalStateException for now. You will fix that method in a second.
+
+7. Checkpoint: JDBC Template findAll
+
+• Because you cannot insert new invoices into the database just yet, you can skip testing the findAll() call and continue straight with writing the create() method in the next section.
+
+8. Jdbc Template inserts and key generation
+
+• Let’s have a look at inserting invoices into the database. It is slightly more elaborate, because the invoice’s id is an auto-generated value and you want to retrieve that value from the database, automatically, right after inserting an invoice.
+
+Here’s the new create() method:
+
+public Invoice create(String userId, Integer amount) {
+    String generatedPdfUrl = cdnUrl + "/images/default/sample.pdf";
+
+    KeyHolder keyHolder = new GeneratedKeyHolder();
+
+    jdbcTemplate.update(connection -> {
+        PreparedStatement ps = connection
+                .prepareStatement("insert into invoices (user_id, pdf_url, amount) values (?, ?, ?)",
+                        Statement.RETURN_GENERATED_KEYS);
+        ps.setString(1, userId);  // 
+        ps.setString(2, generatedPdfUrl);
+        ps.setInt(3, amount);
+        return ps;
+    }, keyHolder);
+
+    String uuid = !keyHolder.getKeys().isEmpty() ? ((UUID) keyHolder.getKeys().values().iterator().next()).toString()
+            : null;
+
+    Invoice invoice = new Invoice();
+    invoice.setId(uuid);
+    invoice.setPdfUrl(generatedPdfUrl);
+    invoice.setAmount(amount);
+    invoice.setUserId(userId);
+    return invoice;
+}
+
+9. Let’s break this down.
+
+String generatedPdfUrl = cdnUrl + "/images/default/sample.pdf";
+
+• As you won’t really generate PDF invoices throughout this project, simply insert a static URL into the database.
+
+KeyHolder keyHolder = new GeneratedKeyHolder();
+jdbcTemplate.update(connection -> {
+    PreparedStatement ps = connection
+            .prepareStatement("insert into invoices (user_id, pdf_url, amount) values (?, ?, ?)",
+                    Statement.RETURN_GENERATED_KEYS);
+    ps.setString(1, userId);  // 
+    ps.setString(2, generatedPdfUrl);
+    ps.setInt(3, amount);
+    return ps;
+}, keyHolder);
+
+• Returning generated primary keys from the database is a bit of a pain. You need to create a preparedStatement, with a magic variable Statement.RETURN_GENERATED_KEY set to true. Only then, your JDBC driver will make sure to make the generated id available to you via a KeyHolder object, that you need to pass into the JDBCTemplate, while executing your insert statement. It is a lot to digest, so have a closer look at these lines again.
+
+• Setting parameters on the PreparedStatment itself is plain JDBC code. These parameters will replace the ? question marks in your SQL with the proper values and automatically safeguard against SQL-injections.
+
+String uuid = !keyHolder.getKeys().isEmpty() ? ((UUID) keyHolder.getKeys().values().iterator().next()).toString()
+        : null;
+
+•This is the rather ugly way to return the auto-generated UUID primary key from the database. The GeneratedKeyholder contains a convenience method to easily return numeric generated keys, but for UUIDs you have to jump through this ugly-code-hoop.
+
+Invoice invoice = new Invoice();
+invoice.setId(uuid);
+invoice.setPdfUrl(generatedPdfUrl);
+invoice.setAmount(amount);
+invoice.setUserId(userId);
+return invoice;
+
+• You are simply creating a new Invoice Java object from the data you passed into this method, combined with the static PDF URL and the generated primary key.
+
+• That’s all you need to do!
+
+10. Checkpoint: Spring JDBCTemplate
+
+Now it is time to restart your application and check if it is still working as expected!
+
+Your application should behave exactly the same.
+
+Let’s give it a try. Remember, on each application start-up you are still inserting two new invoices into the database. Hence you should get similar output when starting your application:
+
+GET http://localhost:8080/invoices
+
+HTTP/1.1 200
+Content-Type: application/json;charset=UTF-8
+Content-Length: 239
+Date: Wed, 12 Feb 2020 16:07:07 GMT
+Keep-Alive: timeout=20
+Connection: keep-alive
+
+[
+    {
+        "id": "40dae195-169a-4856-9ac4-192d32173501",
+        "amount": 50,
+        "user_id": "someUserId",
+        "pdf_url": "https://some-dev-url.marcobehler.com/images/default/sample.pdf"
+    },
+    {
+        "id": "5808a0f9-5f92-4724-93f7-59cba15a2f38",
+        "amount": 100,
+        "user_id": "someOtherUserId",
+        "pdf_url": "https://some-dev-url.marcobehler.com/images/default/sample.pdf"
+    }
+]
+Wow, you did it!
+
+You replaced the in-memory list with real database access. You can create a couple of more invoices now, shut down your application and start it again. Your invoices should still be there! Try it out.
+
+And at a very low-level, this is all that you need to do to connect to any database with Spring. Create a DataSource and a corresponding JdbcTemplate and you are good to go.
+
+If you want to get more information on what the JDBCTemplate can do for you, have a look at the official documentation.(https://docs.spring.io/spring/docs/current/spring-framework-reference/data-access.html#spring-data-tier).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

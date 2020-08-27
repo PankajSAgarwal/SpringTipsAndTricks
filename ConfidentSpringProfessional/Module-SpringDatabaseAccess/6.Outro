@@ -1,0 +1,7 @@
+This was a short and crisp module.
+
+First, you learned how to add an embedded H2 Database to your project and how to create a DataSource for it.
+
+You then set up a JdbcTemplate to refactor your InvoiceService to execute SQL statements against a real database, instead of saving invoices into an in-memory list.
+
+Finally, you had a quick look at how to set up Spring’s @Transactional annotation.

@@ -1,0 +1,189 @@
+1. To connect to a database with Java and Spring, you need two things:
+
+- A database, e.g. MySQL, PostgreSQL, SQL Server, Oracle or any other database.
+
+- A matching JDBC driver for that database.
+
+• For the sake of simplicity, you’re not going to use MySQL or PostgreSQL throughout the rest of the course, because that would mean you would have to install it.
+
+• Instead, you are going to connect to an in-memory H2 database. You do not have to install it, as it comes as a simple Maven dependency and also includes the needed JDBC driver. (Note: This is why it is used, by default, as a testing database in Spring Boot.)
+
+You are now going to add H2, as well as the Spring-JDBC dependency to your project.
+
+• Adding H2 to your project
+Open up your pom.xml file and add the following block, to add the H2 dependency to your project.
+
+<dependency>
+    <groupId>com.h2database</groupId>
+    <artifactId>h2</artifactId>
+    <version>1.4.200</version>
+</dependency>
+
+That’s all you need for H2 to work.
+
+• Adding Spring-JDBC dependencies to your project
+To be able to use Spring’s JDBC support, you also need to add the corresponding Spring JDBC library to your project.
+
+Add this block to your pom.xml and make sure the version aligns with the other Spring dependency versions, 5.2.7.RELEASE in this case.
+
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-jdbc</artifactId>
+    <version>5.2.7.RELEASE</version>
+</dependency>
+
+##  Note: This is not spring-data-jdbc. Just spring-jdbc.
+
+2. Creating A DataSource
+
+• In Java, you connect to databases by configuring a DataSource object with the help of a JDBC driver. You just added the database and driver to your project, so you can immediately start using it.
+
+• H2 calls its DataSource JdbcDataSource. In real-life projects you are likely going to use connection pool libraries on top of your database, which come with their own DataSource classes - but more on that in this article(https://www.marcobehler.com/guides/jdbc).
+
+• So, open up your Spring configuration and create your first DataSource @Bean.
+
+package com.pankaj.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pankaj.myfancypdfinvoices.ApplicationLauncher;
+import org.h2.jdbcx.JdbcDataSource;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.thymeleaf.spring5.SpringTemplateEngine;
+import org.thymeleaf.spring5.templateresolver.SpringResourceTemplateResolver;
+import org.thymeleaf.spring5.view.ThymeleafViewResolver;
+
+import javax.sql.DataSource;
+
+@Configuration
+@ComponentScan(basePackageClasses = ApplicationLauncher.class)
+@PropertySource("classpath:/application.properties")
+@PropertySource(value = "classpath:/application-${spring.profiles.active}.properties"
+                    , ignoreResourceNotFound = true)
+@EnableWebMvc
+public class ApplicationConfiguration {
+
+    @Bean // 
+    public MethodValidationPostProcessor methodValidationPostProcessor() {
+        return new MethodValidationPostProcessor();
+    }
+
+    @Bean
+    public DataSource dataSource() {
+        JdbcDataSource ds = new JdbcDataSource();
+        ds.setURL("jdbc:h2:~/myFirstH2Database");
+        ds.setUser("sa");
+        ds.setPassword("sa");
+        return ds;
+    }
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+
+    @Bean
+    public ThymeleafViewResolver viewResolver() {
+        ThymeleafViewResolver viewResolver = new ThymeleafViewResolver();
+        viewResolver.setTemplateEngine(templateEngine());
+
+        viewResolver.setOrder(1); // optional
+        viewResolver.setViewNames(new String[] {"*.html", "*.xhtml"}); // optional
+        return viewResolver;
+    }
+
+    @Bean
+    public SpringTemplateEngine templateEngine() {
+        SpringTemplateEngine templateEngine = new SpringTemplateEngine();
+        templateEngine.setTemplateResolver(templateResolver());
+        return templateEngine;
+    }
+
+    @Bean
+    public SpringResourceTemplateResolver templateResolver() {
+        SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
+        templateResolver.setPrefix("classpath:/templates/");
+        templateResolver.setCacheable(false);
+        return templateResolver;
+    }
+}
+
+3. Let’s break this down.
+
+@Bean
+public DataSource dataSource() {
+    JdbcDataSource ds = new JdbcDataSource();
+    ds.setURL("jdbc:h2:~/myFirstH2Database");
+    ds.setUser("sa");
+    ds.setPassword("sa");
+    return ds;
+}
+
+• You added a new dataSource() bean method.
+
+JdbcDataSource ds = new JdbcDataSource();
+
+• This is H2’s specific dataSource. When configured correctly (url, username,password), you can ask this datasource to give you database connections. With those connections you’ll be able to execute SQL queries against your database.
+
+ds.setURL("jdbc:h2:~/myFirstH2Database");
+
+•What’s the URL of the database? This URL is again, H2 specific and means: Open (and create if it does not yet exist) a database in a file called myfirsth2database.mv.db, in your home directory (~), so, for example c:\Users\Marco\myfirsth2database. Simple, isn’t it?
+
+ds.setUser("sa");
+ds.setPassword("sa");
+
+• The very first time you create or access your H2 database, it will use the credentials you specify here. Next time, you need to present the same credentials. Picking sa/sa is somewhat of a convention when it comes to H2.
+
+• In terms of setting up your Spring project for database access, that’s already enough.
+
+4. Automatic H2 setup
+
+• If you start-up your project now, you will be able to connect to the H2 database, but your database will not have any tables inside. And you need at least one table that matches your Invoice Java class, to save invoices.
+
+• This means, you’ll want to create a table called invoices, with columns for the four fields id, user_id, pdf_url and amount.
+
+• Create a new file called schema.sql and put it under /src/main/resources.
+
+create table if not exists invoices
+(
+    id      uuid  default random_uuid() primary key,
+    pdf_url varchar(255),
+    user_id varchar(255),
+    amount  int
+);
+
+• It is a simple SQL statement that creates an invoices table with your four columns, whenever the table does not yet exist. But when and how does this SQL file get executed?
+
+• H2 has the capabilities to execute this schema.sql file whenever you connect to your H2 database, so you are always guaranteed that the table exists. To enable this feature, you’ll need to modify the JDBC url in your DataSource bean.
+
+@Bean
+public DataSource dataSource() {
+    JdbcDataSource ds = new JdbcDataSource();
+    ds.setURL("jdbc:h2:~/myFirstH2Database;INIT=RUNSCRIPT FROM 'classpath:schema.sql'");
+    ds.setUser("sa");
+    ds.setPassword("sa");
+    return ds;
+}
+
+What changed? Just this line.
+
+ds.setURL("jdbc:h2:~/myFirstH2Database;INIT=RUNSCRIPT FROM 'classpath:schema.sql'");
+
+• H2 allows you to specify a INIT parameter after your actual JDBC connection url. The init parameter says: run the SQL file you just created, that lives on your classpath (i.e. src/main/resources during development), whenever someone connects to the H2 database.
+
+### Note: Maybe you have some experience with Spring Boot, where you can also create schema.sql files, but don’t have to specify an INIT script parameter with your JDBC URLs. That’s because Spring Boot offers its own script loading feature, that works with any database, not just H2.
+
+5. Checkpoint: Database JDBC Driver
+There’s nothing to check, just now. But adding the two dependencies, configuring the datasource @Bean and having a schema.sql file is the foundation for what’s coming up next: writing SQL queries.
+
+
+
+
+
+
+
+

@@ -1,0 +1,9 @@
+1. So far, you have seen how Spring’s core dependency injection container works, including the Spring MVC web framework.
+
+2. Another big part of Spring is its convenience utilities. Some of the most important utilities are for connecting to relational databases(https://www.marcobehler.com/guides/java-databases-jdbc-hibernate-spring-data).
+
+3.This module is how you connect to databases with plain Spring and a library called spring-jdbc.
+
+4.Do not confuse this section with Spring Data JDBC or Spring Data JPA. All utilities covered in this module are available in core Spring framework and are about a decade old.
+
+They form the basis for every other, more advanced Spring Data project later on.

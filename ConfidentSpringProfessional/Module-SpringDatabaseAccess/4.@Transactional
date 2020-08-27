@@ -1,0 +1,221 @@
+1. Working with database transactions is one of the main features of Spring. If you are completely new to this topic, I highly suggest reading  @Transactional article.(https://www.marcobehler.com/guides/spring-transaction-management-transactional-in-depth)
+
+It contains all the basic theory that you need to understand how Spring’s transaction management works.
+
+2. Enabling TransactionManagement
+
+In practical terms, however, there are two things you need to do to enable Spring’s transaction management (and as you might have guessed: that Spring Boot enables automatically for you!).
+
+First, open up your Spring configuration and add Spring’s transaction management annotation.
+
+package com.pankaj.myfancypdfinvoices.context;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pankaj.myfancypdfinvoices.ApplicationLauncher;
+import org.h2.jdbcx.JdbcDataSource;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.TransactionManager;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.thymeleaf.spring5.SpringTemplateEngine;
+import org.thymeleaf.spring5.templateresolver.SpringResourceTemplateResolver;
+import org.thymeleaf.spring5.view.ThymeleafViewResolver;
+
+import javax.sql.DataSource;
+
+@Configuration
+@ComponentScan(basePackageClasses = ApplicationLauncher.class)
+@PropertySource("classpath:/application.properties")
+@PropertySource(value = "classpath:/application-${spring.profiles.active}.properties"
+                    , ignoreResourceNotFound = true)
+@EnableWebMvc
+@EnableTransactionManagement
+public class ApplicationConfiguration {
+
+    @Bean // 
+    public MethodValidationPostProcessor methodValidationPostProcessor() {
+        return new MethodValidationPostProcessor();
+    }
+
+    @Bean
+    public DataSource dataSource() {
+        JdbcDataSource ds = new JdbcDataSource();
+        ds.setURL("jdbc:h2:~/myFirstH2Database;INIT=RUNSCRIPT FROM 'classpath:schema.sql'");
+        ds.setUser("sa");
+        ds.setPassword("sa");
+        return ds;
+    }
+
+    @Bean
+    public JdbcTemplate jdbcTemplate() {
+        return new JdbcTemplate(dataSource());
+    }
+
+    @Bean
+    public TransactionManager platformTransactionManager() {
+        return new DataSourceTransactionManager(dataSource());
+    }
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+
+    @Bean
+    public ThymeleafViewResolver viewResolver() {
+        ThymeleafViewResolver viewResolver = new ThymeleafViewResolver();
+        viewResolver.setTemplateEngine(templateEngine());
+
+        viewResolver.setOrder(1); // optional
+        viewResolver.setViewNames(new String[] {"*.html", "*.xhtml"}); // optional
+        return viewResolver;
+    }
+
+    @Bean
+    public SpringTemplateEngine templateEngine() {
+        SpringTemplateEngine templateEngine = new SpringTemplateEngine();
+        templateEngine.setTemplateResolver(templateResolver());
+        return templateEngine;
+    }
+
+    @Bean
+    public SpringResourceTemplateResolver templateResolver() {
+        SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
+        templateResolver.setPrefix("classpath:/templates/");
+        templateResolver.setCacheable(false);
+        return templateResolver;
+    }
+}
+
+• What changed?
+
+@EnableTransactionManagement
+public class ApplicationConfiguration {
+
+You need to annotate your Spring configuration with the @EnableTransactionManagement annotation. It allows you to use the @Transactional annotation, to declare transactions programmatically. (You do not need to do this when using Spring Boot, as it will apply this annotation automatically for you.)
+
+@Bean
+public TransactionManager platformTransactionManager() {
+    return new DataSourceTransactionManager(dataSource());
+}
+
+• You also need to configure a TransactionManager bean. The TransactionManager bean is responsible for actually opening up and committing transactions on database connections. Spring offers multiple TransactionManager implementations, because transaction handling is slightly different, whenever you are using a DataSource (like you do here), or another library like Hibernate or jOOQ.
+
+Again, you’ll find more information on this in  article(https://www.marcobehler.com/guides/spring-transaction-management-transactional-in-depth).
+
+3. Using @Transactional
+
+Now, you can annotate your services with the @Transactional annotation. Using transactions isn’t needed if you only have 1-line SQL statements, like you do in your InvoiceService, but nevertheless, this is all you can work with, for now.
+
+package com.pankaj.myfancypdfinvoices.service;
+
+
+import com.pankaj.myfancypdfinvoices.model.Invoice;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.util.List;
+import java.util.UUID;
+
+@Component
+public class InvoiceService {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    private final UserService userService;
+
+    private final String cdnUrl;
+
+    public InvoiceService(UserService userService, JdbcTemplate jdbcTemplate, @Value("${cdn.url}") String cdnUrl) {
+        this.userService = userService;
+        this.cdnUrl = cdnUrl;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @PostConstruct
+    public void init() {
+        System.out.println("Fetching PDF Template from S3...");
+        // TODO download from s3 and save locally
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        System.out.println("Deleting downloaded templates...");
+        // TODO actual deletion of PDFs
+    }
+
+    @Transactional
+    public List<Invoice> findAll() {
+        System.out.println("Is a database transaction open? = " + TransactionSynchronizationManager.isActualTransactionActive());
+        return jdbcTemplate.query("select id, user_id, pdf_url, amount from invoices", (resultSet, rowNum) -> {
+            Invoice invoice = new Invoice();
+            invoice.setId(resultSet.getObject("id").toString());
+            invoice.setPdfUrl(resultSet.getString("pdf_url"));
+            invoice.setUserId(resultSet.getString("user_id"));
+            invoice.setAmount(resultSet.getInt("amount"));
+            return invoice;
+        });
+    }
+
+    @Transactional
+    public Invoice create(String userId, Integer amount) {
+        System.out.println("Is a database transaction open? = " + TransactionSynchronizationManager.isActualTransactionActive());
+        String generatedPdfUrl = cdnUrl + "/images/default/sample.pdf";
+
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection
+                    .prepareStatement("insert into invoices (user_id, pdf_url, amount) values (?, ?, ?)",
+                            Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, userId);  // 
+            ps.setString(2, generatedPdfUrl);
+            ps.setInt(3, amount);
+            return ps;
+        }, keyHolder);
+
+        String uuid = !keyHolder.getKeys().isEmpty() ? ((UUID) keyHolder.getKeys().values().iterator().next()).toString()
+                : null;
+
+        Invoice invoice = new Invoice();
+        invoice.setId(uuid);
+        invoice.setPdfUrl(generatedPdfUrl);
+        invoice.setAmount(amount);
+        invoice.setUserId(userId);
+        return invoice;
+    }
+}
+
+• Make sure to annotate your findAll and create methods with the @Transactional annotation. Note: The annotation only works on public methods.
+
+• As you will otherwise not notice that you are running in a database transaction, you are going to explicitly ask Spring if it opened up a transaction for us. You can do that via the TransactionSynchronizationManager.isActualTransactionActive call.
+
+4. Checkpoint: @Transactional
+
+Restart your application and check the log files. As you are automatically inserting invoices into your database on startup, you should see the following lines.
+
+Is a database transaction open? = true
+Is a database transaction open? = true
+@Transaction handling is a huge topic, but from a practical perspective, that is everything you need to do to get started.
+
+As mentioned already a couple of times, read this article(https://www.marcobehler.com/guides/spring-transaction-management-transactional-in-depth) to get further information.
+
+
+
+
+
