@@ -1,0 +1,12 @@
+Recap
+
+• When you run the main method of your SpringBootApplication, Spring will run through all of its known (100+) AutoConfiguration classes.
+
+• Every AutoConfiguration is just a normal Spring configuration, but with a ton of added @Conditionals. If those @Conditionals match, then the autoconfigurations are evaluated and beans are automatically created for you.
+
+• Mainly, @Conditionals check if specific properties are set or if dependencies are on the classpath. And that the user hasn’t defined @Beans of specific types himself, already.
+
+• This leads to a lot of functionality working out of the box, whenever you create a new Spring Boot project.
+
+• That’s all there is to Spring Boot’s magic! It’s all just automagically generated beans.
+

@@ -1,0 +1,8 @@
+This was the deep dive into Spring Boot.
+
+At the beginning you learned about Spring’s AutoConfigurations, how they work thanks to @Conditionals and how they are structured in Spring Boot’s source code.
+
+You then proceeded to write your very own AutoConfiguration.
+
+You should now have a pretty good grasp of Spring Boot!
+

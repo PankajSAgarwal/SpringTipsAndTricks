@@ -1,0 +1,429 @@
+1. To really understand how AutoConfigurations work, it makes sense to build your own AutoConfiguration.
+
+• In practical terms, this makes sense if you are working inside a company and want to create a default library that all your company projects are supposed to include. If you were just working on your own project, it wouldn’t make too much sense.
+
+• You saw in the previous module that Spring Boot comes with plenty of DataSourceAutoConfigurations, but there’s an AutoConfiguration missing for a relatively new database connection pool, called vibur-dbcp.
+
+2. Creating the AutoConfiguration project
+
+• First, you will need to create a separate, new Maven project containing your spring-boot-company-starter. It will contain your @AutoConfiguration and any dependencies. Official Spring Boot starters are often split-up into more sub-modules, but you want to keep it simple here.
+
+• Create a new directory of your liking, like pankaj-spring-boot-starter, with the following pom.xml file.lk
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.pankaj</groupId>
+    <artifactId>pankaj-spring-boot-starter</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.source>14</maven.compiler.source>
+        <maven.compiler.target>14</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>2.3.1.RELEASE</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency> 
+            <groupId>org.vibur</groupId>
+            <artifactId>vibur-dbcp</artifactId>
+            <version>25.0</version>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+    <!-- end::dependencies[]-->
+</project>
+
+3. Let’s break this down.
+
+<groupId>com.pankaj</groupId>
+<artifactId>pankaj-spring-boot-starter</artifactId>
+<version>1.0-SNAPSHOT</version>
+
+• It is a good convention to call your starter’s artifactId 
+{company}-spring-boot-starter.
+
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-dependencies</artifactId>
+            <version>2.3.1.RELEASE</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+
+• If you want to not have to specify any versions in your pom.xml later on for dependencies, you need to import the spring-boot-dependencies project’s pom.xml file. The <version> you specify here is the Spring Boot version.
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency> 
+            <groupId>org.vibur</groupId>
+            <artifactId>vibur-dbcp</artifactId>
+            <version>25.0</version>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+    <!-- end::dependencies[]-->
+</project>
+
+• The spring-boot-autoconfigure dependency is needed and pulls in any relevant Spring Boot dependencies to write your own @AutoConfigurations. You can leave out the version, as you are importing the spring-boot-dependencies project.
+
+
+• vibur-dbcp is the dependency to the vibur connection pool. Spring’s dependency management doesn’t know it, hence you need to specify its version here. You put the scope to <optional> because you want to let the end-user decide if he wants to use Vibur or not. Think: classpath conditions.
+
+This pom.xml is the basis for your custom autoconfigurations project.
+
+4. Creating a Custom Properties Object
+
+• For demonstration purposes, imagine you want to configure your ViburDataSource with properties in your application.properties, that start with the pankaj prefix:
+
+- pankaj.datasource.url
+- pankaj.datasource.username
+- etc
+
+For that to work, you will need to create a new backing class, called PankajDataSourceProperties. Put it into the com.pankaj.springboot.starter package (and also create the /src/main/java folder for that).
+
+package com.pankaj.springboot.starter;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "pankaj.datasource")
+public class PankajDataSourceProperties {
+
+    private String username;
+    private String password;
+    private String url;
+    private String driverClassName;
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public String getDriverClassName() {
+        return driverClassName;
+    }
+
+    public void setDriverClassName(String driverClassName) {
+        this.driverClassName = driverClassName;
+    }
+}
+
+
+Let’s break this down.
+
+@ConfigurationProperties(prefix = "pankaj.datasource")
+public class PankajDataSourceProperties {
+
+Your properties class is using the @ConfigurationProperties annotation. You can configure it with a prefix, which means that Spring will try and map every property starting with pankaj.datasource, to this bean! Think: pankaj.datasource.url or pankaj.datasource.username.
+
+private String username;
+private String password;
+private String url;
+private String driverClassName;
+
+Furthermore, it is a normal Java bean, containing a couple of fields to get and set the database-specific properties.
+
+That’s enough to get your properties automatically mapped from the application.properties file.
+
+5. Creating the AutoConfiguration
+
+Finally, it’s time to create your autoconfiguration class. Create a new class, called PankajAutoConfiguration. It should look like this:
+
+package com.pankaj.springboot.starter;
+
+import org.springframework.boot.autoconfigure.AutoConfigureBefore;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.vibur.dbcp.ViburDBCPDataSource;
+import org.vibur.dbcp.ViburDataSource;
+
+import javax.sql.DataSource;
+
+@Configuration  // 
+@ConditionalOnClass(ViburDataSource.class)
+@ConditionalOnMissingBean(DataSource.class)
+@AutoConfigureBefore(DataSourceAutoConfiguration.class)
+@EnableConfigurationProperties(pankajDataSourceProperties.class)
+public class pankajAutoConfiguration {
+
+    @Bean
+    public ViburDBCPDataSource dataSource(pankajDataSourceProperties properties) {
+        ViburDBCPDataSource ds = new ViburDBCPDataSource();
+        ds.setJdbcUrl(properties.getUrl());
+        ds.setUsername(properties.getUsername());
+        ds.setPassword(properties.getPassword());
+        ds.setDriverClassName(properties.getDriverClassName());
+        ds.start();
+        return ds;
+    }
+}
+
+
+Let’s break this down.
+
+@Configuration  // 
+@ConditionalOnClass(ViburDataSource.class)
+@ConditionalOnMissingBean(DataSource.class)
+@AutoConfigureBefore(DataSourceAutoConfiguration.class)
+
+• There are a ton of annotations that you should understand by now. The most important one however is the @AutoConfigureBefore(DataSourceAutoconfiguration.class) annotation, which makes sure your autoconfiguration gets processed before Spring Boot creates its own Hikari Datasource on startup.
+
+@EnableConfigurationProperties(PankajDataSourceProperties.class)
+public class PankajAutoConfiguration {
+
+•You explicitly need to enable the configuration property mapping onto your PankajDataSourceProperties.class. If you forget this annotation, all properties inside your PankajDataSourceProperties object will be null.
+
+@Bean
+public ViburDBCPDataSource dataSource(PankajDataSourceProperties properties) {
+    ViburDBCPDataSource ds = new ViburDBCPDataSource();
+    ds.setJdbcUrl(properties.getUrl());
+    ds.setUsername(properties.getUsername());
+    ds.setPassword(properties.getPassword());
+    ds.setDriverClassName(properties.getDriverClassName());
+    ds.start();
+    return ds;
+}
+
+• You are creating a ViburDBCPDataSource here, configuring it with the most important properties, coming straight from your custom properties object.
+
+You’re done! Well, almost. One tiny piece is missing.
+
+6. META-INF/spring.factories
+
+• Simply putting an autoconfiguration class into a library is not enough for Spring Boot projects to know about your AutoConfiguration.
+
+Spring Boot searches for a META-INF file, called spring.factories inside of third-party libraries, containing references to autoconfigurations.
+
+So, create the the file src/main/resources/META-INF/spring.factories and make sure the package of your AutoConfiguration matches the package specified in that file.
+
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.pankaj.springboot.starter.PankajAutoConfiguration
+
+mvn clean install
+It is time to build your autoconfiguration. Run a mvn clean install inside your project folder to put your project into the local .m2 repository.
+
+C:\dev\pankaj-springboot-starter>mvn clean install
+
+[INFO] Scanning for projects...
+[INFO]
+[INFO] ----------< com.pankaj:pankaj-spring-boot-starter >-----------
+[INFO] Building pankaj-spring-boot-starter 1.0-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO]
+[INFO] --- maven-clean-plugin:2.5:clean (default-clean) @ pankaj-spring-boot-starter ---
+[INFO]
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ pankaj-spring-boot-starter ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 1 resource
+[INFO]
+[INFO] --- maven-compiler-plugin:3.1:compile (default-compile) @ pankaj-spring-boot-starter ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 2 source files to C:\dev\pankaj-springboot-starter\target\classes
+[INFO]
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ pankaj-spring-boot-starter ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory C:\dev\pankaj-springboot-starter\src\test\resources
+[INFO]
+[INFO] --- maven-compiler-plugin:3.1:testCompile (default-testCompile) @ pankaj-spring-boot-starter ---
+[INFO] No sources to compile
+[INFO]
+[INFO] --- maven-surefire-plugin:2.12.4:test (default-test) @ pankaj-spring-boot-starter ---
+[INFO] No tests to run.
+[INFO]
+[INFO] --- maven-jar-plugin:2.4:jar (default-jar) @ pankaj-spring-boot-starter ---
+[INFO] Building jar: C:\dev\pankaj-springboot-starter\target\pankaj-spring-boot-starter-1.0-SNAPSHOT.jar
+[INFO]
+[INFO] --- maven-install-plugin:2.4:install (default-install) @ pankaj-spring-boot-starter ---
+[INFO] Installing C:\dev\pankaj-springboot-starter\target\pankaj-spring-boot-starter-1.0-SNAPSHOT.jar to C:\Users\marco\.m2\repository\com\pankaj\pankaj-spring-boot-starter\1.0-SNAPSHOT\pankaj-spring-boot-starter-1.0-SNAPSHOT.jar
+[INFO] Installing C:\dev\pankaj-springboot-starter\pom.xml to C:\Users\marco\.m2\repository\com\pankaj\pankaj-spring-boot-starter\1.0-SNAPSHOT\pankaj-spring-boot-starter-1.0-SNAPSHOT.pom
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  4.907 s
+[INFO] Finished at: 2020-07-06T15:21:17+01:00
+[INFO] ------------------------------------------------------------------------
+
+7. Including the starter in your Spring Boot project
+
+Go back to your Spring Boot project and add the following dependency to your pom.xml file:
+
+<dependency>
+	<groupId>com.pankaj</groupId>
+	<artifactId>pankaj-spring-boot-starter</artifactId>
+	<version>1.0-SNAPSHOT</version>
+</dependency>
+
+To see if your autoconfiguration is working as expected, you can refactor your Spring application to print out the DataSource’s type on application startup.
+
+package com.pankaj.myfancypdfinvoices.springboot;
+
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+
+import javax.sql.DataSource;
+
+@SpringBootApplication
+public class MyfancypdfinvoicesSpringbootApplication {
+
+	@Bean
+	public InitializingBean runner(DataSource dataSource) {
+		return () -> {
+			System.out.println("This is the datasource this Spring Boot project is using: " + dataSource);
+		};
+	}
+
+
+	public static void main(String[] args) {
+		SpringApplication.run(MyfancypdfinvoicesSpringbootApplication.class, args);
+	}
+
+}
+
+It’s a simple InitializingBean that does nothing more than print out a message to the console.
+
+
+8. Checkpoint: Spring Boot Autoconfiguration
+
+Restart your application and you should see a line like this in your console.
+
+This is the datasource this Spring Boot project is using: HikariDataSource (HikariPool-1)
+
+This is because you haven’t added the vibur-dbcp dependency to your project just yet and Spring Boot is autoconfiguring a default HikariCP datasource.
+
+9. Now, go to your application.properties file, delete all spring.datasource.* properties and add these lines. Obviously, if you chose another prefix, use that instead.
+
+cdn.url=https://cdn.pankaj.com
+
+#spring.datasource.driver-class-name=org.h2.Driver
+#spring.datasource.url=jdbc:h2:mem:
+#spring.datasource.username=sa
+#spring.datasource.password=sa
+
+pankaj.datasource.driver-class-name=org.h2.Driver
+pankaj.datasource.url=jdbc:h2:mem:
+pankaj.datasource.username=sa
+pankaj.datasource.password=sa
+
+• Also, make sure to open up your pom.xml file and add the ViburDBCP dependency to your application. The exact version does not matter.
+
+<dependency>
+	<groupId>org.vibur</groupId>
+	<artifactId>vibur-dbcp</artifactId>
+	<version>25.0</version>
+</dependency>
+
+•Then restart your application. It is finally time to see if your AutConfiguration works!
+
+•You should be greeted with this line:
+
+•This is the datasource this Spring Boot project is using: org.vibur.dbcp.ViburDBCPDataSource@1668919e[driverClassName = org.h2.Driver, jdbcUrl = jdbc:h2:mem:, username = sa, externalDataSource = null, poolInitialSize = 5, poolMaxSize = 50, poolFair = true, pool = org.vibur.objectpool.ConcurrentPool@63300c4b[remainingCreated = 5], name = p1, connectionTimeoutInMs = 15000, loginTimeoutInSeconds = 5, acquireRetryDelayInMs = 500, acquireRetryAttempts = 3, statementCacheMaxSize = 0]
+Perfect, it worked!
+
+•Your AutoConfiguration got executed because Spring found the META-INF/spring.factories file, and all the @Conditionals you put on your configuration matched. Hence, your @Bean method creating a new datasource got executed - preventing Spring Boot’s default datasource to be configured.
+
+•Exactly what you wanted. You now know how to write your own AutoConfigurations!
+
+10. Getting a list of all applied auto configurations
+
+If you want to see a list of all auto-configurations that Spring Boot applied when starting up your project, you can start your application with the --debug flag. It prints out a lot of raw information, but is of help when you know exactly what you are looking for.
+
+Set the flag and restart the application.
+
+You will get a lot of output:
+
+============================
+CONDITIONS EVALUATION REPORT
+============================
+
+
+Positive matches:
+-----------------
+ AopAutoConfiguration matched:
+      - @ConditionalOnProperty (spring.aop.auto=true) matched (OnPropertyCondition)
+....
+
+Search for your own AutoConfiguration. In my case, this returns two lines:
+
+ PankajAutoConfiguration matched:
+      - @ConditionalOnClass found required class 'org.vibur.dbcp.ViburDataSource' (OnClassCondition)
+      - @ConditionalOnMissingBean (types: javax.sql.DataSource; SearchStrategy: all) did not find any beans (OnBeanCondition)
+So, you can actually see the output of every @Conditional of your AutoConfiguration. It could find the ViburDataSource class and no other DataSource` was configured. Hence, it got executed!
+
+Again, this output mainly helps if you know what you are looking for, or when debugging your own autoconfigurations.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

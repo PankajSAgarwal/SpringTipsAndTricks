@@ -1,0 +1,3 @@
+1. This is an advanced module, as you are going to learn in detail how Spring Boot works behind the scenes. Keyword: AutoConfigurations.
+
+As you are going to look at Spring Boot’s original source code in this module, it is a lot easier to present all concepts in a screencast, instead of having you to wade through walls of text. Don’t worry, it is going to be the opposite of boring.
