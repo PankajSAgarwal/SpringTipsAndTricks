@@ -1,0 +1,207 @@
+1. Let’s take very tiny steps and start with building the same JSON REST endpoints for your Invoicing web service from the previous module. For this, copy the following classes as-is from your first Spring project into your current Spring Boot project.
+
+- Invoice
+
+- InvoiceDto
+
+- User
+
+- UserService
+
+• Pay extra attention to the package structure, which should look like this, eventually. Note, the springboot subpackage for easier differentiation.
+
+
+• Missing Dependencies
+
+When you try to compile your project now, you will get compile errors in your InvoiceDto class. In older Spring Boot versions, spring-boot-starter-web included hibernate-validator and everything needed for validation. Starting with Spring Boot 2.4, you’ll need to add these dependencies manually.
+
+So, add the following dependency to your pom.xml file and then make sure your project compiles.
+
+<dependency>
+	<groupId>org.springframework.boot</groupId>
+	<artifactId>spring-boot-starter-validation</artifactId>
+</dependency>
+
+3. Re-Creating the InvoiceService
+
+• Now, it’s time to re-create your InvoiceService, in its early in-memory version (without the JDBCTemplate/database support).
+
+package com.pankaj.myfancypdfinvoices.springboot.service;
+
+
+import com.pankaj.myfancypdfinvoices.springboot.model.Invoice;
+import com.pankaj.myfancypdfinvoices.springboot.model.User;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+@Component
+public class InvoiceService {
+
+    private List<Invoice> invoices = new CopyOnWriteArrayList<>();
+
+    private final UserService userService;
+    private final String cdnUrl;
+
+    public InvoiceService(UserService userService, @Value("${cdn.url}") String cdnUrl) {
+        this.userService = userService;
+        this.cdnUrl = cdnUrl;
+    }
+
+    @PostConstruct
+    public void init() {
+        System.out.println("Fetching PDF Template from S3...");
+        // TODO download from s3 and save locally
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        System.out.println("Deleting downloaded templates...");
+        // TODO actual deletion of PDFs
+    }
+
+    public List<Invoice> findAll() {
+        return invoices;
+    }
+
+    public Invoice create(String userId, Integer amount) {
+        User user = userService.findById(userId);
+        if (user == null) {
+            throw new IllegalStateException();
+        }
+
+        // TODO real pdf creation and storing it on network server
+        Invoice invoice = new Invoice(userId, amount, cdnUrl + "/images/default/sample.pdf");
+        invoices.add(invoice);
+        return invoice;
+    }
+}
+
+• You will add Spring Boot’s database capabilities in the next lesson, but for now, you’ll stick with the in-memory list.
+
+2. Creating your @RestController
+
+
+package com.pankaj.myfancypdfinvoices.springboot.web;
+
+
+import com.pankaj.myfancypdfinvoices.springboot.dto.InvoiceDto;
+import com.pankaj.myfancypdfinvoices.springboot.model.Invoice;
+import com.pankaj.myfancypdfinvoices.springboot.service.InvoiceService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.validation.Valid;
+import java.util.List;
+
+@RestController
+public class InvoicesController {
+
+    private final InvoiceService invoiceService;
+
+    public InvoicesController(InvoiceService invoiceService) {
+        this.invoiceService = invoiceService;
+    }
+
+    @GetMapping("/invoices")
+    // @RequestMapping(value = "/invoices", method = RequestMethod.GET)
+    public List<Invoice> invoices() {
+        return invoiceService.findAll();
+    }
+
+    @PostMapping("/invoices")
+    public Invoice createInvoice(@Valid @RequestBody InvoiceDto invoiceDto) {
+        return invoiceService.create(invoiceDto.getUserId(), invoiceDto.getAmount());
+    }
+}
+
+• This should look really familiar to you. It is exactly the same code you wrote with plain Spring Web MVC. That is because Spring Boot uses Spring WebMVC under the hood. The code is, therefore, exactly the same.
+
+3. Checkpoint: RestController
+
+• Restart your application. You will get an exception. Why?
+
+Caused by: java.lang.IllegalArgumentException: Could not resolve placeholder 'cdn.url' in value "${cdn.url}"
+	at org.springframework.util.PropertyPlaceholderHelper.parseStringValue(PropertyPlaceholderHelper.java:178) ~[spring-core-5.2.7.RELEASE.jar:5.2.7.RELEASE]
+	at org.springframework.util.PropertyPlaceholderHelper.replacePlaceholders(PropertyPlaceholderHelper.java:124) ~[spring-core-5.2.7.RELEASE.jar:5.2.7.RELEASE]
+That’s right. Your InvoiceService uses a property. Put that properties into your applicataion.properites file under src/main/resources.
+
+cdn.url=https://cdn.pankaj.com
+Then restart your application. You know the drill by now, try to hammer your GET and POST endpoints with some requests and you should see that sending/receiving JSON should work without any problems.
+
+POST http://localhost:8080/invoices
+Accept: application/json
+Content-Type: application/json
+
+{   "amount": 10,   "user_id": "peppaPig" }
+
+You should get the following back:
+
+{
+    "id": "391edd42-5535-4235-abd1-343a07aead37",
+    "amount": 10,
+    "user_id": "peppaPig",
+    "pdf_url": "https://cdn.marcobehler.com/images/default/sample.pdf"
+}
+Perfect! That is working! Not only that, but everything, including validation, works out of the box, without you having to specify additional annotations or beans (like the MethodAnnotationValidationPostProcessor, remember?) on your SpringBootApplication class. Why? Because Spring Boot does that automatically for you, it is all pre-configured.
+
+Try it out and post a couple of invalid requests.
+
+4. Content Negotiation: XML
+
+• Think back to content-negotiation. You were able to receive XML, in addition to JSON, by just adding the jackson-xml library to your classpath. You’ll now add the same library to your classpath as before. Only this time, you do not need to explicitly define its version, as Spring Boot’s parent pom.xml project will handle the version number for you.
+
+Open your pom.xml file and add the following block:
+
+<dependency>
+	<groupId>com.fasterxml.jackson.dataformat</groupId>
+	<artifactId>jackson-dataformat-xml</artifactId>
+</dependency>
+
+Note, the version tag is missing as it is pre-defined by the Maven parent!
+
+5. Checkpoint: Content Negotiation
+
+Restart your application, and make a GET request with the following Accept header: application/xml. You should get an empty <List/> back, as your in-memory list is empty after you startup your application. This means, content-negotiation and multiple return formats are working. Exactly what you wanted!
+
+<List/>
+
+6. Rest Services: Spring MVC vs Spring Boot
+
+• This was almost a bit underwhelming. None of what you did up until this module (building controllers, services etc) had anything to do with Spring Boot per se. It was all pure Spring framework or rather it was Spring Web MVC!
+
+• The big changes are, that Spring Boot pre-configures some bits and pieces for you:
+
+• You did not have to create an embedded Tomcat, including a DispatcherServlet anymore. You also have a slightly slimmer pom.xml file without explicit versions, provided you know what spring-boot-starters there are and what they do.
+
+Everything else is the same.
+
+Things are going to be a bit different, when looking at database access, because that’s where Spring Boot offers some nice convenience features over good old Spring Framework.
+
+Let’s have a look at that next.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,274 @@
+1.There was a reason you had to re-create the in-memory list version of the InvoiceService in the last lesson. Because in this lesson, you are going to have a look at how database connections and queries work with Spring Boot.
+
+2. Adding the needed Spring Boot JDBC dependencies
+
+Think back to the very beginning of this course, the plain Spring module. You needed a couple of things to connect to a database:
+
+You needed a JDBC Driver/database on your classpath. Remember, you are using H2 database in this course.
+
+You needed to configure a DataSource @Bean in your Spring configuration.
+
+You needed the spring-jdbc library on your classpath, to configure a JDBC Template etc.
+
+As a refresher, this is what it looked like in code. Note: do not copy this bit, you do not need it anymore!.
+
+  @Bean
+    public DataSource dataSource() {
+        JdbcDataSource ds = new JdbcDataSource();
+        ds.setURL("jdbc:h2:˜/test;INIT=RUNSCRIPT FROM 'classpath:schema.sql'");
+        ds.setUser("sa");
+        ds.setPassword("sa");
+        return ds;
+    }
+
+    @Bean
+    public JdbcTemplate jdbcTemplate() {
+        return new JdbcTemplate(dataSource());
+    }
+
+3. Setting up database access is going to be a bit simpler with Spring Boot. You need two things:
+
+• The JDBC driver. Drivers and versions for basically all popular databases are managed by Spring Boot’s dependency management.
+
+• You need the spring-boot-starter-jdbc dependency added to your project. Do not confuse this with spring-data.
+
+So, open up your pom.xml file and add those dependencies.
+
+<dependency>
+	<groupId>org.springframework.boot</groupId> 
+	<artifactId>spring-boot-starter-jdbc</artifactId>
+</dependency>
+
+<dependency>
+	<groupId>com.h2database</groupId> 
+	<artifactId>h2</artifactId>
+</dependency>
+
+• Again, make sure there’s no data in the spring-boot-starter-jdbc artifactId. You will get to Spring Data later, but for now, you want Spring framework’s JDBCTemplate support.
+
+• Also, leave out the version number, as this will be set by the parent project you are inheriting from.
+
+• The same goes for the H2 Database dependency. Also leave out the version here, as it will be set by the Spring parent project you are inheriting from.
+
+4. Adding application.properties
+
+• Adding these two dependencies to your project is actually enough for Spring Boot to automagically create an embedded H2 database whenever you start up your application.
+
+• We will cover this magic in the next module, but for now, let’s be a tiny bit more explicit and configure the H2 database semi-manually.
+
+• Why semi-manually?
+
+• Because a fair amount of Spring Boot configuration is done in your application.properties file, you just need to know the right properties to change.
+
+• So, open up your application.properties file and edit it to look like so:
+
+cdn.url=https://cdn.pankaj.com
+
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.url=jdbc:h2:mem:
+spring.datasource.username=sa
+spring.datasource.password=sa
+
+With the exception of the driverClassName you have encountered all these properties already, when creating your H2 DataSource @Bean. It is going to be:
+
+an in-memory H2 database.
+
+with username and password set to sa.
+
+and the JDBC driver is set to be org.h2.Driver.
+
+You’ll learn more about these properties at the end of this lesson, but for now, it is enough to know that you are essentially configuring the DataSource in your application.properties file (url,name,password) - whereas before you created that @Bean yourself in Java code. Now, Spring Boot will create those beans for you, with the corresponding properties set.
+
+• You’ll learn more about these properties at the end of this lesson, but for now, it is enough to know that you are essentially configuring the DataSource in your application.properties file (url,name,password) - whereas before you created that @Bean yourself in Java code. Now, Spring Boot will create those beans for you, with the corresponding properties set.
+
+5. Adding the database scripts
+
+• Your Spring Boot application also needs to create the invoices database table every time you start up the application. Remember, you had a schema.sql file that got executed, because you modified the datasource url.
+
+• However, looking at the properties above, the jdbc:h2:mem string does not include a reference to that file, anymore. That’s because you don’t need it anymore because Spring Boot will automatically look for a file named schema.sql and execute it on application startup - independent of the database and any H2 specific connection strings. It is Spring Boot’s poor man’s version of Flyway(https://flywaydb.org/) or Liquibase(https://www.liquibase.org/).
+
+That’s enough
+
+6. Refactoring your Spring Boot application to use the database
+
+Now, something scary will happen.
+
+
+Open up your InvoiceService and make it use a JdbcTemplate, by injecting one, like in the previous module. Then, you need to refactor your findAll() and create() methods to work with that jdbcTemplate.
+
+You can take a peek at the previous module or as an exercise, try to re-implement these methods to the best of your knowledge.
+
+You should end up with this:
+
+package com.pankaj.myfancypdfinvoices.springboot.service;
+
+
+import com.pankaj.myfancypdfinvoices.springboot.model.Invoice;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.util.List;
+import java.util.UUID;
+
+@Component
+public class InvoiceService {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    private final UserService userService;
+
+    private final String cdnUrl;
+
+    public InvoiceService(UserService userService, JdbcTemplate jdbcTemplate, @Value("${cdn.url}") String cdnUrl) {
+        this.userService = userService;
+        this.cdnUrl = cdnUrl;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @PostConstruct
+    public void init() {
+        System.out.println("Fetching PDF Template from S3...");
+        // TODO download from s3 and save locally
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        System.out.println("Deleting downloaded templates...");
+        // TODO actual deletion of PDFs
+    }
+
+    @Transactional
+    public List<Invoice> findAll() {
+        System.out.println("Is a database transaction open? = " + TransactionSynchronizationManager.isActualTransactionActive());
+        return jdbcTemplate.query("select id, user_id, pdf_url, amount from invoices", (resultSet, rowNum) -> {
+            Invoice invoice = new Invoice();
+            invoice.setId(resultSet.getObject("id").toString());
+            invoice.setPdfUrl(resultSet.getString("pdf_url"));
+            invoice.setUserId(resultSet.getString("user_id"));
+            invoice.setAmount(resultSet.getInt("amount"));
+            return invoice;
+        });
+    }
+
+    @Transactional
+    public Invoice create(String userId, Integer amount) {
+        System.out.println("Is a database transaction open? = " + TransactionSynchronizationManager.isActualTransactionActive());
+        String generatedPdfUrl = cdnUrl + "/images/default/sample.pdf";
+
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection
+                    .prepareStatement("insert into invoices (user_id, pdf_url, amount) values (?, ?, ?)",
+                            Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, userId);  // 
+            ps.setString(2, generatedPdfUrl);
+            ps.setInt(3, amount);
+            return ps;
+        }, keyHolder);
+
+        String uuid = !keyHolder.getKeys().isEmpty() ? ((UUID) keyHolder.getKeys().values().iterator().next()).toString()
+                : null;
+
+        Invoice invoice = new Invoice();
+        invoice.setId(uuid);
+        invoice.setPdfUrl(generatedPdfUrl);
+        invoice.setAmount(amount);
+        invoice.setUserId(userId);
+        return invoice;
+    }
+}
+
+• What is fascinating is that you can simply inject a JDBCTemplate into your InvoiceService, even though you did not specify it in any configuration class.
+
+Everything else is exactly the same as in the previous module.
+
+7. Checkpoint: Spring Boot Database Access
+
+It is time to restart your application. Open up your REST client and immediately try and POST and GET some invoices.
+
+Checkpoint: Spring Boot Database Access
+It is time to restart your application. Open up your REST client and immediately try and POST and GET some invoices.
+
+POST http://localhost:8080/invoices
+Accept: application/json
+Cache-Control: no-cache
+
+{   "amount": 10,   "user_id": "peppaPig" }
+GET http://localhost:8080/invoices
+Accept: application/json
+
+This should work without any issues and return you something like this:
+
+{
+    "id": "00d5b7bd-2a1b-41bd-910f-64ac637b94cd",
+    "amount": 10,
+    "user_id": "peppaPig",
+    "pdf_url": "https://cdn.marcobehler.com/images/default/sample.pdf"
+}
+
+Furthermore, when you GET invoices, you should see that a database transaction is open.
+
+Do you have an open database transaction? = true
+
+Perfect, you successfully migrated your application to Spring Boot!
+
+8. What just happened?
+
+• What is so amazing about all of this is that you didn’t have to specify any beans manually, as you did previously. More specifically:
+
+• You did not need to create a DataSource @Bean.
+
+• You did not need to create a JdbcTemplate @Bean, but you could inject it into your InvoiceService.
+
+• You did not explicitly have to enable transaction management, @Transactional worked out of the box.
+
+•You did not have to change the database’s jdbc URL to read in your schema.sql script. Instead, putting it under src/main/resources/schema.sql was enough.
+
+9. How is that possible?
+
+•You will learn in much more detail of how this works behind the scenes in the next module, but for now, there’s a simple takeaway:
+
+•If you specify properties like spring.datasource.xxx in your application.properties, then Spring Boot will actually create a DataSource @Bean for you, even if you don’t see it.
+
+•In the same way, it will also create a JdbcTemplate, so that you can inject it into any class you want.
+
+•It will also automatically look for and run that schema.sql script.
+
+•It will automatically enable TransactionManagement features, so that @Transactional works out of the box.
+
+•This leads to the conclusion, that with Spring Boot you define a ton of beans through specifying properties, instead of writing Java classes. And that Spring Boot, with these properties, creates a ton of @beans and other stuff you never directly see. This is what’s called Spring Boot’s autoconfiguration.
+
+•To get an idea of what exactly you can configure through your .properties file (hint: a lot), have a look at this page: https://docs.spring.io/spring-boot/docs/current/reference/html/appendix-application-properties.html.
+
+•It starts with your application’s server port and finishes with settings for security or even messaging. Do not worry if you don’t know them all by heart - no one does.
+
+• Rather, you will have to end up reading that very page or specific parts of the Spring Boot documentation, whenever trying to set up a specific third-party library or a specific aspect like security or logging in your Spring Boot project.
+
+• So, meet your new friend: Spring Boot’s documentation.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

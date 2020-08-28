@@ -1,0 +1,29 @@
+1. The simplest way of building new Spring Boot projects from scratch is via https://start.spring.io/.
+
+2. It is the official Spring Boot project generator, which lets you download skeleton Spring Boot projects in .zip format.
+
+3. Creating a new project
+
+• Remember, you want to create an entirely new project now. So, open up the website and let’s start configuring your project.
+
+• Note: As the start.spring.io page has been subject to multiple changes over the last couple of years, take the screenshot below with caution. Instead, here are the options you should choose in textual form, independent of what the current UI looks like:
+
+• Project → Maven (except, if you know what you are doing and want to use Gradle)
+
+• Language → Java (except, if you know what you are doing and want to use another supported programming language, like Kotlin or Groovy)
+
+• Spring Boot → Take the automatically highlighted, stable version. Spring Initializr always defaults to the latest release version. Everything you are going to learn in this course is going to be valid for older and newer Spring Boot versions as well, so you don’t have to worry about the exact version.
+
+• Project Metadata → This is the Maven metadata, that you set manually in the first module. Use the same groupId, but make sure to call your artifactId something like myfancypdfinvoices-sprinboot, to be able to differentiate this project from your other one. Also note, there’s a bug in the "Package Name", as you cannot use - (dashes) in a package name, though the field will happily accept it. Make sure to replace the dash with a .
+
+• Options → Select your currently installed JDK version, 14 in my case. Leave the packaging set to .jar, as you want to be able to run your application with java -jar springbootapp.jar and not deploy a .war file to a servlet container.
+
+• Dependencies → Make sure to add the Spring Web dependency. You will add further dependencies (actuator, jdbc, h2 etc.) down the road, but for now, Spring Web will do. It contains all the libraries you added manually in the previous modules, to start writing @RestController, immediately (spring-mvc, jackson etc.)
+
+• Once you are done with the dialog, hit Generate, download the resulting .zip file, unpack it somewhere on your machine and open it up in your IDE.
+
+
+
+
+
+

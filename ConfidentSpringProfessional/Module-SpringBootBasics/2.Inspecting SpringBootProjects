@@ -1,0 +1,290 @@
+1. Let’s have a quick look at what kind of project the Spring starter page created. Go to your project directory and do a "dir" (Windows) or "ls" (Unix-like).
+
+2. Let’s go through the most important files and folders.
+
+.gitignore
+
+- The .gitignore file contains some sane git excludes, that prevent you from checking in IDE specific (Netbeans, Eclipse, Intellij) files, as well as Maven’s /target folder.
+
+Embedded Maven
+
+- There are two files called mvnw and mvnw.cmd next to your pom.xml file.       You’ll also find a .mvn folder. What is this?
+
+- mvnw stands for Maven wrapper and is an embedded Maven installation. It comes in two files, one is the Linux version (mwnw) and one the Windows version (mvnw.cmd). If you do not have Maven installed on your machine, you can simply use the mwnw command, instead of the mvn command on your command line and build the project.
+
+- It is a nice piece of added convenience. Note, it has nothing to do with Spring Boot per se, as the Maven wrapper can be added to any project.
+
+3. Checkpoint: Maven Wrapper
+
+• Open up a command line window and execute the following command (obviously putting in the right directory names) in your project directory.
+
+C:\dev\myfancypdfinvoices-springboot>mvnw validate
+[INFO] Scanning for projects...
+[INFO]
+[INFO] -----------< com.marcobehler:myfancypdfinvoices-springboot >------------
+[INFO] Building myfancypdfinvoices-springboot 0.0.1-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  0.578 s
+[INFO] Finished at: 2020-07-04T15:29:34+01:00
+[INFO] ------------------------------------------------------------------------
+
+C:\dev\myfancypdfinvoices-springboot>
+
+• If you forgot to specify your JAVA_HOME environment variable, you will get this error instead.
+
+C:\dev\myfancypdfinvoices-springboot>.\mvnw.cmd validate
+
+Error: JAVA_HOME not found in your environment.
+
+• Please set the JAVA_HOME variable in your environment to match the
+location of your Java installation.
+On Windows you can easily fix this by the following command and restarting (!) your command prompt, obviously putting in the right directory for your Java installation.
+
+C:\dev>setx JAVA_HOME "C:\Program Files\AdoptOpenJDK\jdk-14.0.1.7-hotspot"
+
+4. Spring Boot pom.xml file
+
+• When you open up the pom.xml file of your new project, it does not look massively different from the pom.xml file you built previously.
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>2.3.1.RELEASE</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.pankaj</groupId>
+	<artifactId>myfancypdfinvoices-springboot</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>myfancypdfinvoices-springboot</name>
+	<description>Demo project for Spring Boot</description>
+
+	<properties>
+		<java.version>14</java.version>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+			<exclusions>
+				<exclusion>
+					<groupId>org.junit.vintage</groupId>
+					<artifactId>junit-vintage-engine</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>
+
+5. Let’s break this down.
+
+<parent>
+	<groupId>org.springframework.boot</groupId>
+	<artifactId>spring-boot-starter-parent</artifactId>
+	<version>2.3.1.RELEASE</version>
+	<relativePath/> <!-- lookup parent from repository -->
+</parent>
+
+• You’ll notice that your Maven project inherits from a spring-boot-starter-parent project. It does this for dependency management reasons. Whereas you would have to specify versions of third party libraries in your pom.xml file without this inheritance, Spring Boot pre-defines a ton of fixed third-party dependency versions in that parent project for you. More on that later.
+
+<properties>
+	<java.version>14</java.version>
+</properties>
+
+• Here, you are setting Java version to 14. Note, that this is a Spring Boot specific tag. Internally, this value is going to be set into the appropriate, Maven-specific <maven.compiler.source> tags, that you used in the very first module.
+
+<dependencies>
+	<dependency>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter</artifactId>
+	</dependency>
+
+	<dependency>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-web</artifactId>
+	</dependency>
+
+	<dependency>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-test</artifactId>
+		<scope>test</scope>
+		<exclusions>
+			<exclusion>
+				<groupId>org.junit.vintage</groupId>
+				<artifactId>junit-vintage-engine</artifactId>
+			</exclusion>
+		</exclusions>
+	</dependency>
+</dependencies>
+
+• There’s really just two dependencies in your project, the first one being the spring-boot-starter-web dependency, which sets up Spring, Spring MVC and a lot more. There’s also a dependency that enables Spring Boot’s testing facilities (think: the @SpringBootTest annotation etc.)
+
+<build>
+	<plugins>
+		<plugin>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-maven-plugin</artifactId>
+		</plugin>
+	</plugins>
+</build>
+
+• Finally, the Spring Boot Maven plugin, which, among other things, will make sure that after building your project with mvn clean package, you’ll get a correctly working, executable fat .jar. - which looks so simple, but is a fair amount of work behind the scenes. You can think of it, for now, as being somewhat equivalent to the shade plugin, though it works entirely differently, under the hood.
+
+3. Checkpoint: pom.xml
+
+• This almost looks too clean to be true. Open up a console, and execute the following command (either with mwn, or mwnw) to see all the third-party libraries that your Spring Boot pom.xml file pulls in transitively.
+
+mvn dependency:tree
+
+• You’ll actually be surprised with a long page of libraries, which should look like this:
+
+C:\dev\myfancypdfinvoices-spring-boot>.\mvnw dependency:tree
+[INFO] Scanning for projects...
+[INFO]
+[INFO] -----------< com.marcobehler:myfancypdfinvoices-springboot >------------
+[INFO] Building myfancypdfinvoices-springboot 0.0.1-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO]
+[INFO] --- maven-dependency-plugin:3.1.2:tree (default-cli) @ myfancypdfinvoices-springboot ---
+[INFO] com.marcobehler:myfancypdfinvoices-springboot:jar:0.0.1-SNAPSHOT
+[INFO] +- org.springframework.boot:spring-boot-starter:jar:2.3.1.RELEASE:compile
+[INFO] |  +- org.springframework.boot:spring-boot:jar:2.3.1.RELEASE:compile
+[INFO] |  |  \- org.springframework:spring-context:jar:5.2.7.RELEASE:compile
+[INFO] |  +- org.springframework.boot:spring-boot-autoconfigure:jar:2.3.1.RELEASE:compile
+[INFO] |  +- org.springframework.boot:spring-boot-starter-logging:jar:2.3.1.RELEASE:compile
+[INFO] |  |  +- ch.qos.logback:logback-classic:jar:1.2.3:compile
+[INFO] |  |  |  \- ch.qos.logback:logback-core:jar:1.2.3:compile
+[INFO] |  |  +- org.apache.logging.log4j:log4j-to-slf4j:jar:2.13.3:compile
+[INFO] |  |  |  \- org.apache.logging.log4j:log4j-api:jar:2.13.3:compile
+[INFO] |  |  \- org.slf4j:jul-to-slf4j:jar:1.7.30:compile
+[INFO] |  +- jakarta.annotation:jakarta.annotation-api:jar:1.3.5:compile
+[INFO] |  +- org.springframework:spring-core:jar:5.2.7.RELEASE:compile
+[INFO] |  |  \- org.springframework:spring-jcl:jar:5.2.7.RELEASE:compile
+[INFO] |  \- org.yaml:snakeyaml:jar:1.26:compile
+[INFO] +- org.springframework.boot:spring-boot-starter-web:jar:2.3.1.RELEASE:compile
+[INFO] |  +- org.springframework.boot:spring-boot-starter-json:jar:2.3.1.RELEASE:compile
+[INFO] |  |  +- com.fasterxml.jackson.core:jackson-databind:jar:2.11.0:compile
+[INFO] |  |  |  +- com.fasterxml.jackson.core:jackson-annotations:jar:2.11.0:compile
+[INFO] |  |  |  \- com.fasterxml.jackson.core:jackson-core:jar:2.11.0:compile
+[INFO] |  |  +- com.fasterxml.jackson.datatype:jackson-datatype-jdk8:jar:2.11.0:compile
+[INFO] |  |  +- com.fasterxml.jackson.datatype:jackson-datatype-jsr310:jar:2.11.0:compile
+[INFO] |  |  \- com.fasterxml.jackson.module:jackson-module-parameter-names:jar:2.11.0:compile
+[INFO] |  +- org.springframework.boot:spring-boot-starter-tomcat:jar:2.3.1.RELEASE:compile
+[INFO] |  |  +- org.apache.tomcat.embed:tomcat-embed-core:jar:9.0.36:compile
+[INFO] |  |  +- org.glassfish:jakarta.el:jar:3.0.3:compile
+[INFO] |  |  \- org.apache.tomcat.embed:tomcat-embed-websocket:jar:9.0.36:compile
+[INFO] |  +- org.springframework:spring-web:jar:5.2.7.RELEASE:compile
+[INFO] |  |  \- org.springframework:spring-beans:jar:5.2.7.RELEASE:compile
+[INFO] |  \- org.springframework:spring-webmvc:jar:5.2.7.RELEASE:compile
+[INFO] |     +- org.springframework:spring-aop:jar:5.2.7.RELEASE:compile
+[INFO] |     \- org.springframework:spring-expression:jar:5.2.7.RELEASE:compile
+[INFO] \- org.springframework.boot:spring-boot-starter-test:jar:2.3.1.RELEASE:test
+[INFO]    +- org.springframework.boot:spring-boot-test:jar:2.3.1.RELEASE:test
+[INFO]    +- org.springframework.boot:spring-boot-test-autoconfigure:jar:2.3.1.RELEASE:test
+[INFO]    +- com.jayway.jsonpath:json-path:jar:2.4.0:test
+[INFO]    |  +- net.minidev:json-smart:jar:2.3:test
+[INFO]    |  |  \- net.minidev:accessors-smart:jar:1.2:test
+
+• Looking a bit closer at it, you’ll find all the dependencies you added manually to the project before:
+
+• The embedded Tomcat dependency: tomcat-embed-core.
+
+• Spring dependencies like spring-webmvc and spring-context.
+
+jackson-databind for JSON conversions.
+
+A bunch of other libraries, e.g. logback-classic for logging.
+
+This partially explains why so much stuff works out of the box with Spring Boot: because its spring-boot-starter-web pulls in a ton of other third-party libraries by default.
+
+4. @SpringBootApplication
+
+The main entry class to Spring Boot is a class that is annotated with the @SpringBootApplication annotation. It has a main method that lets you run your Spring Boot application, which by default will boot up an embedded Tomcat on port 8080.
+
+You will find it inside your project under src/main/java/{packagename}, called MyfancypdfinvoicesSpringbootApplication and it will look like this:
+
+package com.pankaj.myfancypdfinvoices.springboot;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class MyfancypdfinvoicesSpringbootApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(MyfancypdfinvoicesSpringbootApplication.class, args);
+	}
+
+}
+
+5. Checkpoint: @SpringBootApplication
+
+Run the main method of your Spring Boot application and in the logs, you will see something like this:
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::        (v2.3.1.RELEASE)
+
+2020-07-04 15:52:55.264  INFO 8200 --- [           main] .MyfancypdfinvoicesSpringbootApplication : Starting MyfancypdfinvoicesSpringbootApplication on DESKTOP-91KJFS3 with PID 8200 (C:\dev\myfancypdfinvoices-springboot\target\classes started by marco in C:\dev\myfancypdfinvoices-springboot)
+2020-07-04 15:52:55.264  INFO 8200 --- [           main] .MyfancypdfinvoicesSpringbootApplication : No active profile set, falling back to default profiles: default
+2020-07-04 15:52:56.067  INFO 8200 --- [           main] .MyfancypdfinvoicesSpringbootApplication : Started MyfancypdfinvoicesSpringbootApplication in 1.501 seconds (JVM running for 2.266)
+
+Process finished with exit code 0
+
+The last couple of lines hint to the fact that your appliation started-up, but then it immediately shut down again.
+
+Why? Because you haven’t built any @Controllers or @RestControllers just yet. More specifically, you need to do exactly the same things as when working with plain Spring Web MVC.
+
+So let’s rebuild the application that you built in the previous module - this time with Spring Boot.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
